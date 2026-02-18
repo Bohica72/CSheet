@@ -1,0 +1,412 @@
+{
+  "id": "pugilist",
+  "name": "Pugilist",
+  "source": "Pugilist2024",
+  "hitDie": 10,
+  "primaryAbility": [
+    "str"
+  ],
+  "saves": [
+    "str",
+    "con"
+  ],
+  "scaling": {
+    "fisticuffs": {
+      "1": "1d8",
+      "5": "1d10",
+      "11": "1d12",
+      "17": "2d6"
+    },
+    "moxie": {
+      "2": 2,
+      "4": 3,
+      "6": 4,
+      "8": 5,
+      "10": 6,
+      "12": 7,
+      "14": 8,
+      "16": 9,
+      "18": 10,
+      "19": 11,
+      "20": 12
+    }
+  },
+  "advancements": {
+    "1": {
+      "grants": [
+        "fisticuffs",
+        "iron_chin"
+      ],
+      "choices": [],
+      "effects": [
+        {
+          "type": "ac_formula",
+          "id": "iron_chin_12_plus_con"
+        }
+      ]
+    },
+    "2": {
+      "grants": [
+        "moxie",
+        "bloodied_but_unbowed",
+        "swagger_streak"
+      ],
+      "choices": [],
+      "effects": []
+    },
+    "3": {
+      "grants": [
+        "heavy_hitter",
+        "pugilist_subclass"
+      ],
+      "choices": [
+        {
+          "type": "subclass",
+          "count": 1
+        }
+      ],
+      "effects": []
+    },
+    "4": {
+      "grants": [
+        "ability_score_improvement",
+        "dig_deep"
+      ],
+      "choices": [
+        {
+          "type": "asi_or_feat",
+          "count": 1
+        }
+      ],
+      "effects": []
+    },
+    "5": {
+      "grants": [
+        "extra_attack",
+        "haymaker"
+      ],
+      "choices": [],
+      "effects": []
+    },
+    "6": {
+      "grants": [
+        "moxie_fueled_fists",
+        "subclass_feature"
+      ],
+      "choices": [],
+      "effects": [
+        {
+          "type": "gain_subclass_feature_at_level"
+        }
+      ]
+    },
+    "7": {
+      "grants": [
+        "down_but_not_out"
+      ],
+      "choices": [],
+      "effects": []
+    },
+    "8": {
+      "grants": [
+        "ability_score_improvement"
+      ],
+      "choices": [
+        {
+          "type": "asi_or_feat",
+          "count": 1
+        }
+      ],
+      "effects": []
+    },
+    "9": {
+      "grants": [
+        "school_of_hard_knocks"
+      ],
+      "choices": [],
+      "effects": []
+    },
+    "10": {
+      "grants": [
+        "herculean",
+        "shake_it_off"
+      ],
+      "choices": [],
+      "effects": []
+    },
+    "11": {
+      "grants": [
+        "subclass_feature"
+      ],
+      "choices": [],
+      "effects": [
+        {
+          "type": "gain_subclass_feature_at_level"
+        }
+      ]
+    },
+    "12": {
+      "grants": [
+        "ability_score_improvement"
+      ],
+      "choices": [
+        {
+          "type": "asi_or_feat",
+          "count": 1
+        }
+      ],
+      "effects": []
+    },
+    "13": {
+      "grants": [
+        "dig_deeper"
+      ],
+      "choices": [],
+      "effects": []
+    },
+    "14": {
+      "grants": [
+        "unbreakable"
+      ],
+      "choices": [],
+      "effects": []
+    },
+    "15": {
+      "grants": [
+        "pugnacious"
+      ],
+      "choices": [],
+      "effects": []
+    },
+    "16": {
+      "grants": [
+        "ability_score_improvement"
+      ],
+      "choices": [
+        {
+          "type": "asi_or_feat",
+          "count": 1
+        }
+      ],
+      "effects": []
+    },
+    "17": {
+      "grants": [
+        "subclass_feature"
+      ],
+      "choices": [],
+      "effects": [
+        {
+          "type": "gain_subclass_feature_at_level"
+        }
+      ]
+    },
+    "18": {
+      "grants": [
+        "fighting_spirit"
+      ],
+      "choices": [],
+      "effects": []
+    },
+    "19": {
+      "grants": [
+        "epic_boon"
+      ],
+      "choices": [
+        {
+          "type": "epic_boon_or_feat",
+          "count": 1
+        }
+      ],
+      "effects": []
+    },
+    "20": {
+      "grants": [
+        "peak_physical_condition"
+      ],
+      "choices": [],
+      "effects": [
+        {
+          "type": "ability_bonus",
+          "abilities": {
+            "str": 2,
+            "con": 2
+          },
+          "max": 23
+        }
+      ]
+    }
+  },
+  "features": {
+    "iron_chin": {
+      "id": "iron_chin",
+      "name": "Iron Chin",
+      "level": 1,
+      "kind": "classFeature"
+    },
+    "fisticuffs": {
+      "id": "fisticuffs",
+      "name": "Fisticuffs",
+      "level": 1,
+      "kind": "classFeature"
+    },
+    "moxie": {
+      "id": "moxie",
+      "name": "Moxie",
+      "level": 2,
+      "kind": "classFeature"
+    },
+    "bloodied_but_unbowed": {
+      "id": "bloodied_but_unbowed",
+      "name": "Bloodied But Unbowed",
+      "level": 2,
+      "kind": "classFeature"
+    },
+    "swagger_streak": {
+      "id": "swagger_streak",
+      "name": "Swagger Streak",
+      "level": 2,
+      "kind": "classFeature"
+    },
+    "heavy_hitter": {
+      "id": "heavy_hitter",
+      "name": "Heavy Hitter",
+      "level": 3,
+      "kind": "classFeature"
+    },
+    "pugilist_subclass": {
+      "id": "pugilist_subclass",
+      "name": "Pugilist Subclass",
+      "level": 3,
+      "kind": "classFeature"
+    },
+    "ability_score_improvement": {
+      "id": "ability_score_improvement",
+      "name": "Ability Score Improvement",
+      "level": 16,
+      "kind": "classFeature"
+    },
+    "dig_deep": {
+      "id": "dig_deep",
+      "name": "Dig Deep",
+      "level": 4,
+      "kind": "classFeature"
+    },
+    "extra_attack": {
+      "id": "extra_attack",
+      "name": "Extra Attack",
+      "level": 5,
+      "kind": "classFeature"
+    },
+    "haymaker": {
+      "id": "haymaker",
+      "name": "Haymaker",
+      "level": 5,
+      "kind": "classFeature"
+    },
+    "moxie_fueled_fists": {
+      "id": "moxie_fueled_fists",
+      "name": "Moxie-Fueled Fists",
+      "level": 6,
+      "kind": "classFeature"
+    },
+    "subclass_feature": {
+      "id": "subclass_feature",
+      "name": "Subclass Feature",
+      "level": 17,
+      "kind": "classFeature"
+    },
+    "down_but_not_out": {
+      "id": "down_but_not_out",
+      "name": "Down But Not Out",
+      "level": 7,
+      "kind": "classFeature"
+    },
+    "school_of_hard_knocks": {
+      "id": "school_of_hard_knocks",
+      "name": "School of Hard Knocks",
+      "level": 9,
+      "kind": "classFeature"
+    },
+    "herculean": {
+      "id": "herculean",
+      "name": "Herculean",
+      "level": 10,
+      "kind": "classFeature"
+    },
+    "shake_it_off": {
+      "id": "shake_it_off",
+      "name": "Shake It Off",
+      "level": 10,
+      "kind": "classFeature"
+    },
+    "dig_deeper": {
+      "id": "dig_deeper",
+      "name": "Dig Deeper",
+      "level": 13,
+      "kind": "classFeature"
+    },
+    "unbreakable": {
+      "id": "unbreakable",
+      "name": "Unbreakable",
+      "level": 14,
+      "kind": "classFeature"
+    },
+    "pugnacious": {
+      "id": "pugnacious",
+      "name": "Pugnacious",
+      "level": 15,
+      "kind": "classFeature"
+    },
+    "fighting_spirit": {
+      "id": "fighting_spirit",
+      "name": "Fighting Spirit",
+      "level": 18,
+      "kind": "classFeature"
+    },
+    "epic_boon": {
+      "id": "epic_boon",
+      "name": "Epic Boon",
+      "level": 19,
+      "kind": "classFeature"
+    },
+    "peak_physical_condition": {
+      "id": "peak_physical_condition",
+      "name": "Peak Physical Condition",
+      "level": 20,
+      "kind": "classFeature"
+    }
+  },
+  "subclasses": [
+    {
+      "id": "sweet_science",
+      "name": "Sweet Science",
+      "shortName": "Sweet Science"
+    },
+    {
+      "id": "squared_circle",
+      "name": "Squared Circle",
+      "shortName": "Squared Circle"
+    },
+    {
+      "id": "street_saint",
+      "name": "Street Saint",
+      "shortName": "Street Saint"
+    },
+    {
+      "id": "piss_and_vinegar",
+      "name": "Piss and Vinegar",
+      "shortName": "Piss and Vinegar"
+    },
+    {
+      "id": "hand_of_dread",
+      "name": "Hand of Dread",
+      "shortName": "Hand of Dread"
+    },
+    {
+      "id": "dog_and_hound",
+      "name": "Dog and Hound",
+      "shortName": "Dog and Hound"
+    }
+  ]
+}
