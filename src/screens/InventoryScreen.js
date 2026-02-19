@@ -4,39 +4,42 @@ import {
   StyleSheet, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { searchItems } from '../utils/ItemStore';
+import { searchItems, getItemByName } from '../utils/ItemStore';
 import { getEquippedBonuses, MAX_ATTUNEMENT } from '../utils/BonusEngine';
 import ItemCard from '../components/ItemCard';
 import { saveCharacter } from '../utils/CharacterStore';
+import { colors, spacing, radius, typography, shadows, sharedStyles } from '../styles/theme';
+
+function rarityColor(rarity) {
+  if (!rarity) return colors.rarity.common;
+  const key = rarity.toLowerCase().replace(/\s/g, '');
+  return colors.rarity[key] ?? colors.rarity.common;
+}
 
 export default function InventoryScreen({ route }) {
   const { character } = route.params;
 
-  const [inventory, setInventory] = useState(character.inventory ?? []);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [inventory, setInventory]         = useState(character.inventory ?? []);
+  const [searchQuery, setSearchQuery]     = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedItem, setSelectedItem]   = useState(null);
 
   const { attunedCount } = getEquippedBonuses(inventory);
 
-  // Persist inventory changes
   const updateInventory = useCallback(async (newInventory) => {
     setInventory(newInventory);
     character.inventory = newInventory;
     await saveCharacter(character);
   }, [character]);
 
-  // Search handler
   const handleSearch = (text) => {
     setSearchQuery(text);
     setSearchResults(searchItems(text));
   };
 
-  // Add item from ItemCard
   const handleAddItem = (item) => {
     const existing = inventory.find(e => e.itemName === item.Name);
     if (existing) {
-      // Increment quantity if already present
       updateInventory(inventory.map(e =>
         e.itemName === item.Name ? { ...e, quantity: e.quantity + 1 } : e
       ));
@@ -54,11 +57,9 @@ export default function InventoryScreen({ route }) {
     setSearchResults([]);
   };
 
-  // Toggle equipped
   const handleToggleEquip = (itemName) => {
-    const entry = inventory.find(e => e.itemName === itemName);
-    const itemData = searchItems(itemName, 1)[0]; // get CSV data
-    // Attunement check
+    const entry    = inventory.find(e => e.itemName === itemName);
+    const itemData = getItemByName(itemName);
     if (!entry.equipped && itemData?.Attunement === 'Yes' && attunedCount >= MAX_ATTUNEMENT) {
       Alert.alert('Attunement Full', `You can only be attuned to ${MAX_ATTUNEMENT} items at once.`);
       return;
@@ -70,16 +71,14 @@ export default function InventoryScreen({ route }) {
     ));
   };
 
-  // Update quantity
   const handleQuantityChange = (itemName, val) => {
     const num = parseInt(val, 10);
     if (isNaN(num) || num < 0) return;
     if (num === 0) {
       Alert.alert('Remove Item', `Remove ${itemName} from inventory?`, [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () =>
-          updateInventory(inventory.filter(e => e.itemName !== itemName))
-        },
+        { text: 'Remove', style: 'destructive',
+          onPress: () => updateInventory(inventory.filter(e => e.itemName !== itemName)) },
       ]);
     } else {
       updateInventory(inventory.map(e =>
@@ -88,7 +87,6 @@ export default function InventoryScreen({ route }) {
     }
   };
 
-  // Update charges
   const handleChargeChange = (itemName, val) => {
     const num = parseInt(val, 10);
     if (isNaN(num) || num < 0) return;
@@ -97,68 +95,116 @@ export default function InventoryScreen({ route }) {
     ));
   };
 
-  const renderInventoryItem = ({ item: entry }) => (
-    <View style={styles.inventoryRow}>
-      <View style={styles.inventoryMain}>
-        <Text style={styles.inventoryName}>{entry.itemName}</Text>
+  const renderInventoryItem = ({ item: entry }) => {
+    const itemData  = getItemByName(entry.itemName);
+    const rColor    = rarityColor(itemData?.Rarity);
+    return (
+      <View style={[styles.inventoryRow, { borderLeftColor: rColor }]}>
+        <View style={styles.inventoryTop}>
+          <View style={styles.inventoryTitleRow}>
+            <Text style={styles.inventoryName}>{entry.itemName}</Text>
+            {itemData?.Rarity && (
+              <Text style={[styles.rarityBadge, { color: rColor }]}>
+                {itemData.Rarity}
+              </Text>
+            )}
+          </View>
+          {itemData?.ObjectType && (
+            <Text style={styles.itemType}>{itemData.ObjectType}</Text>
+          )}
+        </View>
+
         <View style={styles.inventoryControls}>
           {/* Quantity */}
-          <TextInput
-            style={styles.qtyInput}
-            keyboardType="numeric"
-            value={String(entry.quantity)}
-            onChangeText={(v) => handleQuantityChange(entry.itemName, v)}
-          />
-          {/* Charges (if applicable) */}
+          <View style={styles.controlGroup}>
+            <Text style={styles.controlLabel}>QTY</Text>
+            <TextInput
+              style={styles.controlInput}
+              keyboardType="numeric"
+              value={String(entry.quantity)}
+              onChangeText={(v) => handleQuantityChange(entry.itemName, v)}
+            />
+          </View>
+
+          {/* Charges */}
           {entry.charges !== null && (
-            <View style={styles.chargeRow}>
-              <Ionicons name="flash" size={12} color="#f0c040" />
-              <TextInput
-                style={styles.chargeInput}
-                keyboardType="numeric"
-                value={String(entry.charges)}
-                onChangeText={(v) => handleChargeChange(entry.itemName, v)}
-              />
+            <View style={styles.controlGroup}>
+              <Text style={styles.controlLabel}>CHARGES</Text>
+              <View style={styles.chargeRow}>
+                <Ionicons name="flash" size={10} color={colors.gold} />
+                <TextInput
+                  style={[styles.controlInput, { color: colors.gold }]}
+                  keyboardType="numeric"
+                  value={String(entry.charges)}
+                  onChangeText={(v) => handleChargeChange(entry.itemName, v)}
+                />
+              </View>
             </View>
           )}
-          {/* Equip toggle */}
+
+          {/* Equip */}
           <TouchableOpacity
             style={[styles.equipButton, entry.equipped && styles.equipButtonActive]}
             onPress={() => handleToggleEquip(entry.itemName)}
           >
-            <Text style={styles.equipButtonText}>
+            <Ionicons
+              name={entry.equipped ? 'shield-checkmark' : 'shield-outline'}
+              size={12}
+              color={entry.equipped ? colors.textPrimary : colors.textMuted}
+            />
+            <Text style={[styles.equipButtonText, entry.equipped && styles.equipButtonTextActive]}>
               {entry.equipped ? 'Equipped' : 'Equip'}
             </Text>
           </TouchableOpacity>
         </View>
+
+        {entry.attuned && (
+          <View style={styles.attunedRow}>
+            <Ionicons name="sparkles" size={10} color={colors.gold} />
+            <Text style={styles.attunedText}>Attuned</Text>
+          </View>
+        )}
       </View>
-      {entry.attuned && (
-        <Text style={styles.attunedBadge}>✦ Attuned</Text>
-      )}
-    </View>
-  );
+    );
+  };
 
   return (
-    <View style={styles.container}>
+    <View style={sharedStyles.screen}>
 
-      {/* Attunement counter */}
+      {/* Attunement bar */}
       <View style={styles.attunementBar}>
-        <Ionicons name="sparkles" size={14} color="#f0c040" />
+        <Ionicons name="sparkles" size={14} color={colors.gold} />
         <Text style={styles.attunementText}>
-          Attunement: {attunedCount} / {MAX_ATTUNEMENT}
+          Attunement  {attunedCount} / {MAX_ATTUNEMENT}
         </Text>
+        <View style={styles.attunementPips}>
+          {Array.from({ length: MAX_ATTUNEMENT }).map((_, i) => (
+            <View
+              key={i}
+              style={[styles.attunementPip, i < attunedCount && styles.attunementPipFilled]}
+            />
+          ))}
+        </View>
       </View>
 
       {/* Search */}
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search items..."
-        placeholderTextColor="#666"
-        value={searchQuery}
-        onChangeText={handleSearch}
-      />
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={16} color={colors.textMuted} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search items to add..."
+          placeholderTextColor={colors.textDisabled}
+          value={searchQuery}
+          onChangeText={handleSearch}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults([]); }}>
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
 
-      {/* Search results dropdown */}
+      {/* Search results */}
       {searchResults.length > 0 && (
         <View style={styles.searchResults}>
           {searchResults.map((item, index) => (
@@ -167,9 +213,16 @@ export default function InventoryScreen({ route }) {
               style={styles.searchResultRow}
               onPress={() => { setSelectedItem(item); setSearchResults([]); }}
             >
-             <Text style={styles.searchResultName}>{item.Name}</Text>
-    <Text style={styles.searchResultType}>{item.ObjectType}</Text>
-  </TouchableOpacity>
+              <View style={styles.searchResultLeft}>
+                <Text style={styles.searchResultName}>{item.Name}</Text>
+                <Text style={styles.searchResultType}>{item.ObjectType}</Text>
+              </View>
+              {item.Rarity && (
+                <Text style={[styles.searchResultRarity, { color: rarityColor(item.Rarity) }]}>
+                  {item.Rarity}
+                </Text>
+              )}
+            </TouchableOpacity>
           ))}
         </View>
       )}
@@ -177,13 +230,18 @@ export default function InventoryScreen({ route }) {
       {/* Inventory list */}
       <FlatList
         data={inventory}
-          keyExtractor={(item, index) => `${item.itemName}-${index}`}        renderItem={renderInventoryItem}
+        keyExtractor={(item, index) => `${item.itemName}-${index}`}
+        renderItem={renderInventoryItem}
+        contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No items in inventory. Search above to add.</Text>
+          <View style={styles.emptyState}>
+            <Ionicons name="bag-outline" size={40} color={colors.textDisabled} />
+            <Text style={styles.emptyText}>No items in inventory</Text>
+            <Text style={styles.emptySubtext}>Search above to add items</Text>
+          </View>
         }
       />
 
-      {/* Item detail card */}
       <ItemCard
         item={selectedItem}
         onClose={() => setSelectedItem(null)}
@@ -195,33 +253,181 @@ export default function InventoryScreen({ route }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e', padding: 12 },
-  attunementBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  attunementText: { color: '#f0c040', marginLeft: 6, fontSize: 13 },
+  // Attunement bar
+  attunementBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surfaceDeep,
+  },
+  attunementText: {
+    color: colors.gold,
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: spacing.xs,
+    flex: 1,
+  },
+  attunementPips: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  attunementPip: {
+    width: 10,
+    height: 10,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    backgroundColor: 'transparent',
+  },
+  attunementPipFilled: {
+    backgroundColor: colors.gold,
+  },
+
+  // Search
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    margin: spacing.md,
+    marginBottom: 4,
+    paddingHorizontal: spacing.md,
+  },
+  searchIcon: {
+    marginRight: spacing.sm,
+  },
   searchInput: {
-    backgroundColor: '#16213e', color: '#fff', borderRadius: 8,
-    padding: 10, fontSize: 14, marginBottom: 4,
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: 14,
+    paddingVertical: spacing.sm,
   },
-  searchResults: { backgroundColor: '#0f3460', borderRadius: 8, marginBottom: 8, maxHeight: 200 },
-  searchResultRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 10, borderBottomWidth: 1, borderBottomColor: '#16213e' },
-  searchResultName: { color: '#fff', fontSize: 13, flex: 1 },
-  searchResultType: { color: '#aaa', fontSize: 11 },
-  inventoryRow: { backgroundColor: '#16213e', borderRadius: 8, padding: 10, marginBottom: 6 },
-  inventoryMain: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  inventoryName: { color: '#fff', fontSize: 14, flex: 1 },
-  inventoryControls: { flexDirection: 'row', alignItems: 'center' },
-  qtyInput: {
-    backgroundColor: '#0f3460', color: '#fff', borderRadius: 6,
-    width: 40, textAlign: 'center', padding: 4, marginRight: 8,
+  searchResults: {
+    backgroundColor: colors.surfaceAlt,
+    marginHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: 4,
+    maxHeight: 220,
+    ...shadows.card,
   },
-  chargeRow: { flexDirection: 'row', alignItems: 'center', marginRight: 8 },
-  chargeInput: {
-    backgroundColor: '#0f3460', color: '#f0c040', borderRadius: 6,
-    width: 36, textAlign: 'center', padding: 4,
+  searchResultRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surfaceDeep,
   },
-  equipButton: { backgroundColor: '#0f3460', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
-  equipButtonActive: { backgroundColor: '#e94560' },
-  equipButtonText: { color: '#fff', fontSize: 12 },
-  attunedBadge: { color: '#f0c040', fontSize: 11, marginTop: 4 },
-  emptyText: { color: '#666', fontStyle: 'italic', textAlign: 'center', marginTop: 40 },
+  searchResultLeft: { flex: 1 },
+  searchResultName: { color: colors.textPrimary, fontSize: 13, fontWeight: '600' },
+  searchResultType: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  searchResultRarity: { fontSize: 11, fontWeight: 'bold' },
+
+  // Inventory rows
+  inventoryRow: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderLeftWidth: 3,
+    ...shadows.card,
+  },
+  inventoryTop: { marginBottom: spacing.sm },
+  inventoryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inventoryName: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  rarityBadge: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  itemType: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  inventoryControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  controlGroup: { alignItems: 'center' },
+  controlLabel: {
+    ...typography.label,
+    marginBottom: 2,
+  },
+  controlInput: {
+    backgroundColor: colors.surfaceDeep,
+    color: colors.textPrimary,
+    borderRadius: radius.sm,
+    width: 44,
+    textAlign: 'center',
+    padding: spacing.xs,
+    fontSize: 14,
+  },
+  chargeRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  equipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceDeep,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    gap: spacing.xs,
+    marginLeft: 'auto',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  equipButtonActive: {
+    backgroundColor: colors.accentDim,
+    borderColor: colors.accent,
+  },
+  equipButtonText: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  equipButtonTextActive: {
+    color: colors.textPrimary,
+    fontWeight: 'bold',
+  },
+  attunedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  attunedText: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+
+  // Empty state
+  emptyState: {
+    alignItems: 'center',
+    paddingTop: 60,
+  },
+  emptyText: {
+    color: colors.textMuted,
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: spacing.md,
+  },
+  emptySubtext: {
+    color: colors.textDisabled,
+    fontSize: 13,
+    marginTop: spacing.xs,
+  },
 });

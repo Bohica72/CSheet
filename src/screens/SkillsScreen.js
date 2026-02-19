@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { colors, spacing, radius, typography, shadows, sharedStyles } from '../styles/theme';
 
 const ABILITIES = [
   { key: 'str', label: 'Strength' },
@@ -11,27 +12,25 @@ const ABILITIES = [
 ];
 
 const SKILLS = [
-  { key: 'athletics',     label: 'Athletics',       ability: 'str' },
-  { key: 'acrobatics',    label: 'Acrobatics',       ability: 'dex' },
-  { key: 'sleightofhand', label: 'Sleight of Hand',  ability: 'dex' },
-  { key: 'stealth',       label: 'Stealth',          ability: 'dex' },
-  { key: 'arcana',        label: 'Arcana',           ability: 'int' },
-  { key: 'history',       label: 'History',          ability: 'int' },
-  { key: 'investigation', label: 'Investigation',    ability: 'int' },
-  { key: 'nature',        label: 'Nature',           ability: 'int' },
-  { key: 'religion',      label: 'Religion',         ability: 'int' },
-  { key: 'animalhandling',label: 'Animal Handling',  ability: 'wis' },
-  { key: 'insight',       label: 'Insight',          ability: 'wis' },
-  { key: 'medicine',      label: 'Medicine',         ability: 'wis' },
-  { key: 'perception',    label: 'Perception',       ability: 'wis' },
-  { key: 'survival',      label: 'Survival',         ability: 'wis' },
-  { key: 'deception',     label: 'Deception',        ability: 'cha' },
-  { key: 'intimidation',  label: 'Intimidation',     ability: 'cha' },
-  { key: 'performance',   label: 'Performance',      ability: 'cha' },
-  { key: 'persuasion',    label: 'Persuasion',       ability: 'cha' },
+  { key: 'athletics',      label: 'Athletics',       ability: 'str' },
+  { key: 'acrobatics',     label: 'Acrobatics',       ability: 'dex' },
+  { key: 'sleightofhand',  label: 'Sleight of Hand',  ability: 'dex' },
+  { key: 'stealth',        label: 'Stealth',          ability: 'dex' },
+  { key: 'arcana',         label: 'Arcana',           ability: 'int' },
+  { key: 'history',        label: 'History',          ability: 'int' },
+  { key: 'investigation',  label: 'Investigation',    ability: 'int' },
+  { key: 'nature',         label: 'Nature',           ability: 'int' },
+  { key: 'religion',       label: 'Religion',         ability: 'int' },
+  { key: 'animalhandling', label: 'Animal Handling',  ability: 'wis' },
+  { key: 'insight',        label: 'Insight',          ability: 'wis' },
+  { key: 'medicine',       label: 'Medicine',         ability: 'wis' },
+  { key: 'perception',     label: 'Perception',       ability: 'wis' },
+  { key: 'survival',       label: 'Survival',         ability: 'wis' },
+  { key: 'deception',      label: 'Deception',        ability: 'cha' },
+  { key: 'intimidation',   label: 'Intimidation',     ability: 'cha' },
+  { key: 'performance',    label: 'Performance',      ability: 'cha' },
+  { key: 'persuasion',     label: 'Persuasion',       ability: 'cha' },
 ];
-
-const SAVES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
 function formatBonus(n) {
   return n >= 0 ? `+${n}` : `${n}`;
@@ -41,51 +40,73 @@ export default function SkillsScreen({ route }) {
   const { character } = route.params;
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: spacing.xl }}
+    >
 
       {/* ABILITY SCORES */}
-      <Text style={styles.sectionHeader}>Ability Scores</Text>
+      <Text style={sharedStyles.sectionHeader}>Ability Scores</Text>
       <View style={styles.abilityGrid}>
         {ABILITIES.map(({ key, label }) => {
-          const score = character.getAbilityScore(key);
-          const mod = character.getAbilityMod(key);
+          const score   = character.getAbilityScore(key);
+          const mod     = character.getAbilityMod(key);
+          const acColor = colors.ability[key];
           return (
-            <View key={key} style={styles.abilityCard}>
-              <Text style={styles.abilityLabel}>{label.slice(0, 3).toUpperCase()}</Text>
+            <View key={key} style={[styles.abilityCard, { borderTopColor: acColor }]}>
+              <Text style={[styles.abilityLabel, { color: acColor }]}>
+                {label.slice(0, 3).toUpperCase()}
+              </Text>
               <Text style={styles.abilityScore}>{score}</Text>
-              <Text style={styles.abilityMod}>{formatBonus(mod)}</Text>
+              <View style={[styles.abilityModBadge, { backgroundColor: acColor }]}>
+                <Text style={styles.abilityMod}>{formatBonus(mod)}</Text>
+              </View>
             </View>
           );
         })}
       </View>
 
       {/* SAVING THROWS */}
-      <Text style={styles.sectionHeader}>Saving Throws</Text>
+      <Text style={sharedStyles.sectionHeader}>Saving Throws</Text>
       <View style={styles.saveRow}>
-        {SAVES.map((key) => {
-          const bonus = character.getSaveBonus(key);
+        {ABILITIES.map(({ key }) => {
+          const bonus     = character.getSaveBonus(key);
           const proficient = character.proficiencies.saves.includes(key);
+          const acColor   = colors.ability[key];
           return (
-            <View key={key} style={styles.saveCell}>
-              <Text style={styles.saveDot}>{proficient ? '●' : '○'}</Text>
+            <View key={key} style={[styles.saveCell, proficient && { borderColor: acColor }]}>
+              <Text style={[styles.saveDot, { color: proficient ? acColor : colors.textDisabled }]}>
+                {proficient ? '●' : '○'}
+              </Text>
               <Text style={styles.saveLabel}>{key.toUpperCase()}</Text>
-              <Text style={styles.saveBonus}>{formatBonus(bonus)}</Text>
+              <Text style={[styles.saveBonus, { color: proficient ? acColor : colors.textPrimary }]}>
+                {formatBonus(bonus)}
+              </Text>
             </View>
           );
         })}
       </View>
 
       {/* SKILLS */}
-      <Text style={styles.sectionHeader}>Skills</Text>
+      <Text style={sharedStyles.sectionHeader}>Skills</Text>
       {SKILLS.map(({ key, label, ability }) => {
-        const bonus = character.getSkillBonus(key);
+        const bonus      = character.getSkillBonus(key);
         const proficient = character.proficiencies.skills.includes(key);
+        const acColor    = colors.ability[ability];
         return (
-          <View key={key} style={styles.skillRow}>
-            <Text style={styles.skillDot}>{proficient ? '●' : '○'}</Text>
+          <View key={key} style={[styles.skillRow, proficient && styles.skillRowProficient]}>
+            <Text style={[styles.skillDot, { color: proficient ? acColor : colors.textDisabled }]}>
+              {proficient ? '●' : '○'}
+            </Text>
             <Text style={styles.skillLabel}>{label}</Text>
-            <Text style={styles.skillAbility}>{ability.toUpperCase()}</Text>
-            <Text style={styles.skillBonus}>{formatBonus(bonus)}</Text>
+            <View style={[styles.abilityTag, { backgroundColor: acColor + '33' }]}>
+              <Text style={[styles.abilityTagText, { color: acColor }]}>
+                {ability.toUpperCase()}
+              </Text>
+            </View>
+            <Text style={[styles.skillBonus, { color: proficient ? acColor : colors.textPrimary }]}>
+              {formatBonus(bonus)}
+            </Text>
           </View>
         );
       })}
@@ -95,37 +116,121 @@ export default function SkillsScreen({ route }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e', padding: 12 },
-  sectionHeader: { color: '#e0e0e0', fontSize: 16, fontWeight: 'bold', marginBottom: 8, marginTop: 12 },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+  },
 
   // Ability grid
-  abilityGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  abilityCard: {
-    width: '30%', backgroundColor: '#16213e', borderRadius: 10,
-    padding: 10, alignItems: 'center', marginBottom: 8,
+  abilityGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
   },
-  abilityLabel: { color: '#aaa', fontSize: 10, marginBottom: 2 },
-  abilityScore: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
-  abilityMod: { color: '#4fc3f7', fontSize: 14, marginTop: 2 },
+  abilityCard: {
+    width: '31%',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderTopWidth: 3,
+    padding: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    ...shadows.card,
+  },
+  abilityLabel: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
+  },
+  abilityScore: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.textPrimary,
+  },
+  abilityModBadge: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginTop: spacing.xs,
+  },
+  abilityMod: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: colors.background,
+  },
 
   // Saves
-  saveRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  saveCell: {
-    flex: 1, backgroundColor: '#16213e', borderRadius: 8,
-    padding: 8, alignItems: 'center', marginHorizontal: 2,
+  saveRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
   },
-  saveDot: { color: '#4fc3f7', fontSize: 10 },
-  saveLabel: { color: '#aaa', fontSize: 9 },
-  saveBonus: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  saveCell: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.surfaceDeep,
+    ...shadows.card,
+  },
+  saveDot: {
+    fontSize: 10,
+    marginBottom: 2,
+  },
+  saveLabel: {
+    ...typography.label,
+    marginBottom: 2,
+  },
+  saveBonus: {
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
 
   // Skills
   skillRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#16213e', borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 8, marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: 4,
+    borderLeftWidth: 2,
+    borderLeftColor: 'transparent',
   },
-  skillDot: { color: '#4fc3f7', fontSize: 12, marginRight: 8 },
-  skillLabel: { color: '#fff', flex: 1, fontSize: 14 },
-  skillAbility: { color: '#aaa', fontSize: 11, marginRight: 12 },
-  skillBonus: { color: '#4fc3f7', fontSize: 16, fontWeight: 'bold', minWidth: 32, textAlign: 'right' },
+  skillRowProficient: {
+    borderLeftColor: colors.accent,
+  },
+  skillDot: {
+    fontSize: 12,
+    marginRight: spacing.sm,
+    width: 14,
+  },
+  skillLabel: {
+    color: colors.textPrimary,
+    flex: 1,
+    fontSize: 13,
+  },
+  abilityTag: {
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginRight: spacing.sm,
+  },
+  abilityTagText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  skillBonus: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    minWidth: 36,
+    textAlign: 'right',
+  },
 });
