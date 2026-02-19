@@ -3,6 +3,7 @@ export const sampleCharacter = {
   name: "Thorin Ironforge",
   race: "Dwarf",
   classes: [{ className: "Fighter", level: 3 }],
+  subclassId: 'sweet_science',  // or whichever subclass your test character uses
   abilities: {
     str: 16,
     dex: 12,
