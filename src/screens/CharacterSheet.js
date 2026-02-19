@@ -1,4 +1,4 @@
-import React from 'react';
+eimport React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Character } from '../models/Character';
 

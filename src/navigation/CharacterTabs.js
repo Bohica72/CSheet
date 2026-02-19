@@ -10,7 +10,8 @@ import ReferenceScreen from '../screens/ReferenceScreen';
 const Tab = createBottomTabNavigator();
 
 export default function CharacterTabs({ route }) {
-  // route.params.characterId (or the whole character) later
+  const { character } = route.params;
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -26,10 +27,10 @@ export default function CharacterTabs({ route }) {
         headerShown: false,
       })}
     >
-      <Tab.Screen name="Overview" component={OverviewScreen} />
-      <Tab.Screen name="Skills" component={SkillsScreen} />
-      <Tab.Screen name="Inventory" component={InventoryScreen} />
-      <Tab.Screen name="Reference" component={ReferenceScreen} />
+      <Tab.Screen name="Overview" component={OverviewScreen} initialParams={{ character }} />
+      <Tab.Screen name="Skills" component={SkillsScreen} initialParams={{ character }} />
+      <Tab.Screen name="Inventory" component={InventoryScreen} initialParams={{ character }} />
+      <Tab.Screen name="Reference" component={ReferenceScreen} initialParams={{ character }} />
     </Tab.Navigator>
   );
 }

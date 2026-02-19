@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { loadCharacters, addCharacter } from '../utils/CharacterStore';
 import { sampleCharacter } from '../data/sampleCharacter';
+import { Character } from '../models/Character'; // ← add this import
+
 
 export default function CharacterList({ onSelectCharacter }) {
   const [characters, setCharacters] = useState([]);
@@ -22,7 +24,7 @@ export default function CharacterList({ onSelectCharacter }) {
     })();
   }, []);
 
-  const handleAdd = async () => {
+    const handleAdd = async () => {
     const newChar = {
       ...sampleCharacter,
       id: 'char_' + Date.now(),
@@ -31,6 +33,7 @@ export default function CharacterList({ onSelectCharacter }) {
     const updated = await addCharacter(newChar);
     setCharacters(updated);
   };
+
 
   if (loading) {
     return (
@@ -60,7 +63,7 @@ export default function CharacterList({ onSelectCharacter }) {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.item}
-            onPress={() => onSelectCharacter(item)}
+            onPress={() => onSelectCharacter(new Character(item))}
           >
             <Text style={styles.name}>{item.name}</Text>
             <Text style={styles.sub}>

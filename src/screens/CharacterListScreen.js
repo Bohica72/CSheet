@@ -5,7 +5,7 @@ export default function CharacterListScreen({ navigation }) {
   return (
     <CharacterList
       onSelectCharacter={(character) => {
-        navigation.navigate('Character', { characterId: character.id });
+        navigation.navigate('Character', { character });
       }}
     />
   );
