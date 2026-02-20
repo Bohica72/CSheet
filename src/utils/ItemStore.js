@@ -14,5 +14,8 @@ export function searchItems(query, limit = 30) {
 
 // Look up a single item by exact name
 export function getItemByName(name) {
-  return ALL_ITEMS.find(item => item.Name === name) ?? null;
+  console.log('getItemByName called with:', name);
+  const result = ALL_ITEMS.find(item => item.Name === name) ?? null;
+  console.log('getItemByName result:', result?.Name ?? 'null');
+  return result;
 }

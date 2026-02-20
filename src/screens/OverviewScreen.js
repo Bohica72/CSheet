@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, TextInput,
   StyleSheet, ScrollView, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { saveCharacter } from '../utils/CharacterStore';
+import { getItemByName } from '../utils/ItemStore';
 import {
   colors, spacing, radius, typography,
   shadows, sharedStyles
 } from '../styles/theme';
-
+import ItemCard from '../components/ItemCard';
 function rollDie(faces) {
   return Math.floor(Math.random() * faces) + 1;
 }
@@ -24,39 +25,53 @@ export default function OverviewScreen({ route }) {
   const [inspiration, setInspiration]           = useState(character.inspiration ?? 0);
   const [hpModalVisible, setHpModalVisible]     = useState(false);
   const [hpInput, setHpInput]                   = useState('');
-  const [hpMode, setHpMode]                     = useState('damage');
   const [restModalVisible, setRestModalVisible] = useState(false);
   const [hitDiceModalVisible, setHitDiceModalVisible] = useState(false);
   const [diceToSpend, setDiceToSpend]           = useState(1);
   const [lastRollResult, setLastRollResult]     = useState(null);
+  const [equippedModalVisible, setEquippedModalVisible] = useState(false);
+
+  // useRef avoids async state timing issues when opening the modal
+  const selectedEquippedRef = useRef(null);
 
   const moxieMax    = character.getMoxieMax();
   const hitDice     = character.getHitDice();
   const hitDieFaces = parseInt(hitDice.split('d')[1], 10);
   const conMod      = character.getAbilityMod('con');
-  const attacks     = character.attacks ?? [];
   const hpPercent   = Math.max(0, hpCurrent / character.hpMax);
+
+  const equippedItems   = (character.inventory ?? []).filter(i => i.equipped);
+  const equippedAttacks = character.getEquippedWeaponAttacks?.() ?? [];
 
   const persist = async (updates) => {
     Object.assign(character, updates);
     await saveCharacter(character);
   };
 
-  // HP bar colour
   const hpBarColor = hpPercent > 0.5
     ? colors.success
     : hpPercent > 0.25
       ? colors.warning
       : colors.accent;
 
-  const applyHp = () => {
+  // Temp HP absorbs damage first, overflow carries to real HP
+  const applyHp = (mode) => {
     const val = parseInt(hpInput, 10);
-    if (isNaN(val)) return;
-    let newHp = hpCurrent;
+    if (isNaN(val) || val <= 0) return;
+    let newHp   = hpCurrent;
     let newTemp = hpTemp;
-    if (hpMode === 'damage')  newHp  = Math.max(0, hpCurrent - val);
-    if (hpMode === 'healing') newHp  = Math.min(character.hpMax, hpCurrent + val);
-    if (hpMode === 'temp')    newTemp = val;
+    if (mode === 'damage') {
+      if (newTemp > 0) {
+        const absorbed  = Math.min(newTemp, val);
+        newTemp         = newTemp - absorbed;
+        const remainder = val - absorbed;
+        newHp           = Math.max(0, newHp - remainder);
+      } else {
+        newHp = Math.max(0, newHp - val);
+      }
+    }
+    if (mode === 'healing') newHp  = Math.min(character.hpMax, hpCurrent + val);
+    if (mode === 'temp')    newTemp = val;
     setHpCurrent(newHp);
     setHpTemp(newTemp);
     persist({ hpCurrent: newHp, hpTemp: newTemp });
@@ -74,7 +89,7 @@ export default function OverviewScreen({ route }) {
       total += roll + conMod;
     }
     total = Math.max(0, total);
-    const newHp = Math.min(character.hpMax, hpCurrent + total);
+    const newHp        = Math.min(character.hpMax, hpCurrent + total);
     const newRemaining = hitDiceRemaining - diceToSpend;
     setHpCurrent(newHp);
     setHitDiceRemaining(newRemaining);
@@ -106,7 +121,21 @@ export default function OverviewScreen({ route }) {
     Alert.alert('Long Rest', 'HP, Moxie, and Hit Dice fully restored.');
   };
 
-  const equippedAttacks = character.getEquippedWeaponAttacks?.() ?? [];
+  const getItemBonusSummary = (item) => {
+    if (!item) return null;
+    const parts = [];
+    if (item.BonusAC)     parts.push(`+${item.BonusAC} AC`);
+    if (item.BonusWeapon) parts.push(`+${item.BonusWeapon} ATK/DMG`);
+    if (item.BonusStr)    parts.push(`+${item.BonusStr} STR`);
+    if (item.BonusDex)    parts.push(`+${item.BonusDex} DEX`);
+    if (item.BonusCon)    parts.push(`+${item.BonusCon} CON`);
+    if (item.BonusInt)    parts.push(`+${item.BonusInt} INT`);
+    if (item.BonusWis)    parts.push(`+${item.BonusWis} WIS`);
+    if (item.BonusCha)    parts.push(`+${item.BonusCha} CHA`);
+    if (item.bonusAC)     parts.push(`+${item.bonusAC} AC`);
+    if (item.bonusWeapon) parts.push(`+${item.bonusWeapon} ATK/DMG`);
+    return parts.length > 0 ? parts.join(', ') : null;
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -115,7 +144,7 @@ export default function OverviewScreen({ route }) {
         {/* HP BAR */}
         <TouchableOpacity
           style={styles.hpBarContainer}
-          onPress={() => setHpModalVisible(true)}
+          onPress={() => { setHpInput(''); setHpModalVisible(true); }}
           activeOpacity={0.8}
         >
           <View style={styles.hpBarHeader}>
@@ -134,8 +163,6 @@ export default function OverviewScreen({ route }) {
 
         {/* TOP CARDS ROW */}
         <View style={styles.cardRow}>
-
-          {/* Hit Dice */}
           <TouchableOpacity
             style={styles.card}
             onPress={() => setHitDiceModalVisible(true)}
@@ -146,7 +173,6 @@ export default function OverviewScreen({ route }) {
             <Text style={styles.cardSub}>of {character.level} d{hitDieFaces}</Text>
           </TouchableOpacity>
 
-          {/* Moxie */}
           <TouchableOpacity
             style={[styles.card, styles.cardGold]}
             onPress={() => {
@@ -165,24 +191,24 @@ export default function OverviewScreen({ route }) {
             <Text style={[styles.cardValue, { color: colors.gold }]}>{moxie}</Text>
             <Text style={styles.cardSub}>/ {moxieMax}</Text>
           </TouchableOpacity>
-
         </View>
 
         {/* STATS GRID */}
         <Text style={sharedStyles.sectionHeader}>Combat Stats</Text>
         <View style={styles.grid}>
           {[
-            { label: 'AC',           value: character.getArmorClass(),      color: colors.accentSoft },
-            { label: 'Initiative',   value: `+${character.getInitiativeBonus()}`, color: colors.accentSoft },
-            { label: 'Speed',        value: `${character.speed}ft`,         color: colors.accentSoft },
-            { label: 'Inspiration',  value: inspiration ? '✦' : '—',       color: colors.gold,
+            { label: 'AC',          value: character.getArmorClass(),             color: colors.accentSoft },
+            { label: 'Initiative',  value: `+${character.getInitiativeBonus()}`,  color: colors.accentSoft },
+            { label: 'Prof.',       value: `+${character.proficiencyBonus}`,       color: colors.accentSoft },
+            { label: 'Speed',       value: `${character.speed}ft`,                color: colors.accentSoft },
+            { label: 'Pass. Perc', value: character.getPassivePerception(),        color: colors.accentSoft },
+            { label: 'Inspiration', value: inspiration ? '✦' : '—',              color: colors.gold,
               onPress: () => {
                 const newVal = inspiration ? 0 : 1;
                 setInspiration(newVal);
                 persist({ inspiration: newVal });
               }
             },
-            { label: 'Pass. Perc',   value: character.getPassivePerception(), color: colors.accentSoft },
           ].map((stat) => (
             <TouchableOpacity
               key={stat.label}
@@ -199,7 +225,6 @@ export default function OverviewScreen({ route }) {
         {/* ATTACKS */}
         <Text style={sharedStyles.sectionHeader}>Attacks</Text>
 
-        {/* Fisticuffs — always shown */}
         <View style={styles.attackRow}>
           <View style={styles.attackNameCol}>
             <Text style={styles.attackName}>Fisticuffs</Text>
@@ -217,7 +242,6 @@ export default function OverviewScreen({ route }) {
           </View>
         </View>
 
-        {/* Equipped weapons */}
         {equippedAttacks.map((atk, i) => (
           <View key={i} style={[styles.attackRow, styles.attackRowWeapon]}>
             <View style={styles.attackNameCol}>
@@ -239,6 +263,36 @@ export default function OverviewScreen({ route }) {
 
         {equippedAttacks.length === 0 && (
           <Text style={styles.emptyText}>Equip a weapon in Inventory to add attacks</Text>
+        )}
+
+        {/* EQUIPPED ITEMS */}
+        <Text style={sharedStyles.sectionHeader}>Equipped Items</Text>
+
+        {equippedItems.length === 0 ? (
+          <Text style={styles.emptyText}>No items currently equipped</Text>
+        ) : (
+          equippedItems.map((item, i) => {
+            const fullItem = getItemByName(item.itemName) ?? {};
+            const merged   = { ...fullItem, ...item };
+            const bonus    = getItemBonusSummary(merged);
+            return (
+              <TouchableOpacity
+                key={i}
+                style={styles.equippedRow}
+                onLongPress={() => {
+                  selectedEquippedRef.current = merged;
+                  setEquippedModalVisible(true);
+                }}
+                delayLongPress={400}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.equippedName} numberOfLines={1}>{item.itemName}</Text>
+                {item.attuned && <Text style={styles.attunedBadge}>◈</Text>}
+                {bonus        && <Text style={styles.equippedBonus}>{bonus}</Text>}
+                <Text style={styles.equippedType}>{fullItem.ObjectType ?? '—'}</Text>
+              </TouchableOpacity>
+            );
+          })
         )}
 
       </ScrollView>
@@ -263,24 +317,35 @@ export default function OverviewScreen({ route }) {
               onChangeText={setHpInput}
               placeholder="0"
               placeholderTextColor={colors.textDisabled}
+              autoFocus
             />
+            <Text style={styles.modalHint}>Tap an action to apply</Text>
             <View style={styles.modeRow}>
-              {['damage', 'healing', 'temp'].map((mode) => (
+              {[
+                { mode: 'damage',  label: 'Damage',  icon: 'skull-outline' },
+                { mode: 'healing', label: 'Heal',    icon: 'heart-outline' },
+                { mode: 'temp',    label: 'Temp HP', icon: 'shield-outline' },
+              ].map(({ mode, label, icon }) => (
                 <TouchableOpacity
                   key={mode}
-                  style={[styles.modeButton, hpMode === mode && styles.modeButtonActive]}
-                  onPress={() => setHpMode(mode)}
+                  style={styles.modeButton}
+                  onPress={() => applyHp(mode)}
                 >
-                  <Text style={[styles.modeButtonText, hpMode === mode && styles.modeButtonTextActive]}>
-                    {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                  </Text>
+                  <Ionicons
+                    name={icon}
+                    size={20}
+                    color={
+                      mode === 'damage'  ? colors.accent :
+                      mode === 'healing' ? colors.success :
+                      colors.accentSoft
+                    }
+                    style={{ marginBottom: 4 }}
+                  />
+                  <Text style={styles.modeButtonText}>{label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-            <TouchableOpacity style={sharedStyles.primaryButton} onPress={applyHp}>
-              <Text style={sharedStyles.primaryButtonText}>Apply</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setHpModalVisible(false)}>
+            <TouchableOpacity onPress={() => { setHpModalVisible(false); setHpInput(''); }}>
               <Text style={sharedStyles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -324,7 +389,6 @@ export default function OverviewScreen({ route }) {
             <Text style={styles.modalSub}>
               CON {conMod >= 0 ? `+${conMod}` : conMod} added per die
             </Text>
-
             <View style={styles.stepper}>
               <TouchableOpacity
                 style={styles.stepperBtn}
@@ -340,7 +404,6 @@ export default function OverviewScreen({ route }) {
                 <Text style={styles.stepperBtnText}>+</Text>
               </TouchableOpacity>
             </View>
-
             {lastRollResult && (
               <View style={styles.rollResult}>
                 <Text style={styles.rollDice}>[{lastRollResult.rolls.join(' + ')}]</Text>
@@ -348,32 +411,64 @@ export default function OverviewScreen({ route }) {
                   +{lastRollResult.conMod >= 0 ? lastRollResult.conMod : lastRollResult.conMod} CON × {lastRollResult.rolls.length}
                 </Text>
                 <Text style={styles.rollTotal}>
-                  +{lastRollResult.total} HP  →  {lastRollResult.newHp} / {character.hpMax}
+                  +{lastRollResult.total} HP → {lastRollResult.newHp} / {character.hpMax}
                 </Text>
               </View>
             )}
-
             {!lastRollResult ? (
               <TouchableOpacity
                 style={[sharedStyles.primaryButton, hitDiceRemaining === 0 && { backgroundColor: colors.textDisabled }]}
                 onPress={rollHitDice}
                 disabled={hitDiceRemaining === 0}
               >
-                <Text style={sharedStyles.primaryButtonText}>
-                  Roll {diceToSpend}d{hitDieFaces}
-                </Text>
+                <Text style={sharedStyles.primaryButtonText}>Roll {diceToSpend}d{hitDieFaces}</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={sharedStyles.primaryButton} onPress={closeHitDiceModal}>
                 <Text style={sharedStyles.primaryButtonText}>Done</Text>
               </TouchableOpacity>
             )}
-
             {!lastRollResult && (
               <TouchableOpacity onPress={closeHitDiceModal}>
                 <Text style={sharedStyles.cancelText}>Cancel</Text>
               </TouchableOpacity>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* EQUIPPED ITEM DESCRIPTION MODAL */}
+      <Modal visible={equippedModalVisible} transparent animationType="fade">
+        <View style={sharedStyles.modalOverlay}>
+          <View style={sharedStyles.modalBox}>
+            <Text style={sharedStyles.modalTitle}>
+              {selectedEquippedRef.current?.itemName ?? selectedEquippedRef.current?.Name ?? '—'}
+            </Text>
+            <Text style={styles.equippedModalType}>
+              {selectedEquippedRef.current?.ObjectType ?? '—'}
+              {selectedEquippedRef.current?.Rarity ? `  ·  ${selectedEquippedRef.current.Rarity}` : ''}
+              {selectedEquippedRef.current?.attuned ? '  ◈ Attuned' : ''}
+            </Text>
+            {getItemBonusSummary(selectedEquippedRef.current) ? (
+              <Text style={styles.equippedModalBonus}>
+                {getItemBonusSummary(selectedEquippedRef.current)}
+              </Text>
+            ) : null}
+            {selectedEquippedRef.current?.Description ? (
+              <ScrollView style={styles.equippedModalDescScroll}>
+                <Text style={styles.equippedModalDesc}>
+                  {selectedEquippedRef.current.Description}
+                </Text>
+              </ScrollView>
+            ) : (
+              <Text style={styles.equippedModalDesc}>No description available.</Text>
+            )}
+            <TouchableOpacity
+              style={[sharedStyles.primaryButton, { marginTop: spacing.md }]}
+              onPress={() => setEquippedModalVisible(false)}
+            >
+              <Text style={sharedStyles.primaryButtonText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -463,11 +558,13 @@ const styles = StyleSheet.create({
   // Stats grid
   grid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.xs,
     marginBottom: spacing.md,
   },
   gridCell: {
-    flex: 1,
+    width: '30%',
+    flexGrow: 1,
     backgroundColor: colors.surface,
     borderRadius: radius.sm,
     padding: spacing.sm,
@@ -529,6 +626,65 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
+
+  // Equipped items
+  equippedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.gold,
+    gap: spacing.sm,
+    ...shadows.card,
+  },
+  equippedName: {
+    color: colors.textPrimary,
+    fontWeight: 'bold',
+    fontSize: 14,
+    flex: 1,
+  },
+  equippedType: {
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+  attunedBadge: {
+    color: colors.gold,
+    fontSize: 13,
+  },
+  equippedBonus: {
+    color: colors.accentSoft,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  // Equipped item modal
+  equippedModalType: {
+    color: colors.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  equippedModalBonus: {
+    color: colors.accentSoft,
+    fontSize: 13,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  equippedModalDescScroll: {
+    maxHeight: 200,
+    marginBottom: spacing.sm,
+  },
+  equippedModalDesc: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    lineHeight: 20,
   },
 
   // Rest FAB
@@ -545,12 +701,18 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
 
-  // Modals
+  // HP modal
   largeInput: {
     fontSize: 32,
     textAlign: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     padding: spacing.md,
+  },
+  modalHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    textAlign: 'center',
+    marginBottom: spacing.md,
   },
   modeRow: {
     flexDirection: 'row',
@@ -564,20 +726,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceDeep,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  modeButtonActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentDim,
+    borderColor: colors.surfaceAlt,
   },
   modeButtonText: {
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-  modeButtonTextActive: {
     color: colors.textPrimary,
+    fontSize: 12,
     fontWeight: 'bold',
   },
+
+  // Rest modal
   restButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -598,6 +755,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+
+  // Hit dice modal
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
