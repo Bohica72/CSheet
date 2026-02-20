@@ -1,22 +1,23 @@
 export const colors = {
   // Backgrounds
-  background:   '#0d0d0d',
-  surface:      '#1a1a2e',
-  surfaceAlt:   '#16213e',
-  surfaceDeep:  '#0f3460',
+  background:   '#1e2326',
+  surface:      '#2e383c',
+  surfaceAlt:   '#384b55',
+  surfaceDeep:  '#9da9a0',
+  surfaceDeep2: '#3c4841',
 
   // Accent
-  accent:       '#c41e3a',
+  accent:       '#7fbbb3',
   accentDim:    '#7a1020',
-  accentSoft:   '#4fc3f7',
+  accentSoft:   '#d3c6aa',
 
   // Text
-  textPrimary:  '#f0f0f0',
+  textPrimary:  '#d3c6aa',
   textMuted:    '#888888',
   textDisabled: '#444444',
 
   // Special
-  gold:         '#f0c040',
+  gold:         '#9da9a0',
   success:      '#4caf50',
   warning:      '#ff9800',
 
@@ -32,10 +33,10 @@ export const colors = {
 
   // Ability colours
   ability: {
-    str: '#c41e3a',
-    dex: '#4caf50',
-    con: '#ff9800',
-    int: '#4fc3f7',
+    str: '#e67e80',
+    dex: '#7fbbb3',
+    con: '#dbbc7f',
+    int: '#9da9a0',
     wis: '#b44fc3',
     cha: '#f0c040',
   },
@@ -69,7 +70,7 @@ export const typography = {
 };
 
 export const shadows = {
-  card: {
+  cardV: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,

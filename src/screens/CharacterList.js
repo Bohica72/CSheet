@@ -1,50 +1,93 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, StatusBar
+  StyleSheet, ActivityIndicator, StatusBar,
+  Modal, TextInput, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { loadCharacters, addCharacter } from '../utils/CharacterStore';
+import { loadCharacters, addCharacter, saveCharacter, deleteCharacter } from '../utils/CharacterStore';
 import { Character } from '../models/Character';
 import { sampleCharacter } from '../data/sampleCharacter';
 import { colors, spacing, typography, radius, shadows, sharedStyles } from '../styles/theme';
 
-function rarityColor(classId) {
-  // Extend this as you add more classes
-  return colors.accent;
-}
-
 export default function CharacterList({ onSelectCharacter }) {
-  const [characters, setCharacters] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [characters, setCharacters]         = useState([]);
+  const [loading, setLoading]               = useState(true);
+  const [actionModalVisible, setActionModalVisible] = useState(false);
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [renameInput, setRenameInput]       = useState('');
+  const selectedCharRef                     = useRef(null);
 
   useFocusEffect(
-  useCallback(() => {
-    (async () => {
-      setLoading(true);
-      const data = await loadCharacters();
-      if (data.length === 0) {
-        const seeded = { ...sampleCharacter, id: 'char_' + Date.now() };
-        const updated = await addCharacter(seeded);
-        setCharacters(updated);
-      } else {
-        setCharacters(data);
-      }
-      setLoading(false);
-    })();
-  }, [])
-);
-
+    useCallback(() => {
+      (async () => {
+        setLoading(true);
+        const data = await loadCharacters();
+        if (data.length === 0) {
+          const seeded  = { ...sampleCharacter, id: 'char_' + Date.now() };
+          const updated = await addCharacter(seeded);
+          setCharacters(updated);
+        } else {
+          setCharacters(data);
+        }
+        setLoading(false);
+      })();
+    }, [])
+  );
 
   const handleAdd = async () => {
     const newChar = {
       ...sampleCharacter,
-      id: 'char_' + Date.now(),
+      id:   'char_' + Date.now(),
       name: 'New Pugilist ' + (characters.length + 1),
     };
     const updated = await addCharacter(newChar);
     setCharacters(updated);
+  };
+
+  const handleLongPress = (item) => {
+    selectedCharRef.current = item;
+    setActionModalVisible(true);
+  };
+
+  const openRename = () => {
+    setRenameInput(selectedCharRef.current?.name ?? '');
+    setActionModalVisible(false);
+    setTimeout(() => setRenameModalVisible(true), 300);
+  };
+
+  const handleRename = async () => {
+    const trimmed = renameInput.trim();
+    if (!trimmed) return;
+    const updated = { ...selectedCharRef.current, name: trimmed };
+    await saveCharacter(updated);
+    setCharacters(prev =>
+      prev.map(c => c.id === updated.id ? { ...c, name: trimmed } : c)
+    );
+    setRenameModalVisible(false);
+  };
+
+  const handleDelete = () => {
+    const char = selectedCharRef.current;
+    setActionModalVisible(false);
+    setTimeout(() => {
+      Alert.alert(
+        'Delete Character',
+        `Are you sure you want to delete ${char.name}? This cannot be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              const updated = await deleteCharacter(char.id);
+              setCharacters(updated);
+            },
+          },
+        ]
+      );
+    }, 300);
   };
 
   if (loading) {
@@ -84,6 +127,7 @@ export default function CharacterList({ onSelectCharacter }) {
       {/* Page header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Characters</Text>
+        <Text style={styles.headerHint}>Hold a character to rename or delete</Text>
       </View>
 
       <FlatList
@@ -94,11 +138,11 @@ export default function CharacterList({ onSelectCharacter }) {
           <TouchableOpacity
             style={styles.characterCard}
             onPress={() => onSelectCharacter(new Character(item))}
+            onLongPress={() => handleLongPress(item)}
+            delayLongPress={400}
             activeOpacity={0.75}
           >
-            {/* Red left accent */}
             <View style={styles.cardAccent} />
-
             <View style={styles.cardBody}>
               <Text style={styles.characterName}>{item.name}</Text>
               <Text style={styles.characterSub}>
@@ -111,25 +155,13 @@ export default function CharacterList({ onSelectCharacter }) {
                   ? ' · ' + item.subclassId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
                   : ''}
               </Text>
-
-              {/* Quick stats row */}
               <View style={styles.quickStats}>
-                <StatPip label="HP" value={item.hpMax ?? '—'} />
-                <StatPip label="AC" value={item.ac ?? '—'} />
-                <StatPip
-                  label="Moxie"
-                  value={item.moxieMax ?? '—'}
-                  color={colors.gold}
-                />
+                <StatPip label="HP"    value={item.hpMax ?? '—'} />
+                <StatPip label="AC"    value={item.ac ?? '—'} />
+                <StatPip label="Moxie" value={item.moxieMax ?? '—'} color={colors.gold} />
               </View>
             </View>
-
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={colors.textMuted}
-              style={styles.cardChevron}
-            />
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={styles.cardChevron} />
           </TouchableOpacity>
         )}
       />
@@ -138,6 +170,60 @@ export default function CharacterList({ onSelectCharacter }) {
       <TouchableOpacity style={styles.fab} onPress={handleAdd}>
         <Ionicons name="add" size={28} color={colors.textPrimary} />
       </TouchableOpacity>
+
+      {/* ACTION MODAL — rename or delete */}
+      <Modal visible={actionModalVisible} transparent animationType="fade">
+        <View style={sharedStyles.modalOverlay}>
+          <View style={sharedStyles.modalBox}>
+            <Text style={sharedStyles.modalTitle}>
+              {selectedCharRef.current?.name}
+            </Text>
+            <Text style={styles.actionSub}>
+              Level {selectedCharRef.current?.level ?? 1} · {selectedCharRef.current?.classId ?? 'Pugilist'}
+            </Text>
+
+            <TouchableOpacity style={styles.actionButton} onPress={openRename}>
+              <Ionicons name="pencil-outline" size={20} color={colors.accentSoft} />
+              <Text style={styles.actionButtonText}>Rename</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.actionButton, styles.actionButtonDanger]} onPress={handleDelete}>
+              <Ionicons name="trash-outline" size={20} color={colors.accent} />
+              <Text style={[styles.actionButtonText, { color: colors.accent }]}>Delete</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setActionModalVisible(false)}>
+              <Text style={sharedStyles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* RENAME MODAL */}
+      <Modal visible={renameModalVisible} transparent animationType="slide">
+        <View style={sharedStyles.modalOverlay}>
+          <View style={sharedStyles.modalBox}>
+            <Text style={sharedStyles.modalTitle}>Rename Character</Text>
+            <TextInput
+              style={[sharedStyles.input, styles.renameInput]}
+              value={renameInput}
+              onChangeText={setRenameInput}
+              placeholder="Character name"
+              placeholderTextColor={colors.textDisabled}
+              autoFocus
+              maxLength={40}
+              onSubmitEditing={handleRename}
+            />
+            <TouchableOpacity style={sharedStyles.primaryButton} onPress={handleRename}>
+              <Text style={sharedStyles.primaryButtonText}>Save Name</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setRenameModalVisible(false)}>
+              <Text style={sharedStyles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -182,6 +268,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.textPrimary,
   },
+  headerHint: {
+    ...typography.subtitle,
+    fontSize: 11,
+    marginTop: 2,
+  },
 
   // List
   listContent: {
@@ -204,9 +295,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     marginRight: spacing.md,
   },
-  cardBody: {
-    flex: 1,
-  },
+  cardBody: { flex: 1 },
   characterName: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -217,14 +306,10 @@ const styles = StyleSheet.create({
     ...typography.subtitle,
     marginBottom: spacing.sm,
   },
-  cardChevron: {
-    marginLeft: spacing.sm,
-  },
+  cardChevron: { marginLeft: spacing.sm },
 
   // Quick stats
-  quickStats: {
-    flexDirection: 'row',
-  },
+  quickStats: { flexDirection: 'row' },
   statPip: {
     marginRight: spacing.lg,
     alignItems: 'center',
@@ -253,5 +338,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.card,
+  },
+
+  // Action modal
+  actionSub: {
+    color: colors.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceDeep,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.md,
+    width: '100%',
+  },
+  actionButtonDanger: {
+    borderWidth: 1,
+    borderColor: colors.accentDim,
+  },
+  actionButtonText: {
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  // Rename modal
+  renameInput: {
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+    padding: spacing.md,
   },
 });

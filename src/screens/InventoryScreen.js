@@ -96,77 +96,83 @@ export default function InventoryScreen({ route }) {
   };
 
   const renderInventoryItem = ({ item: entry }) => {
-    const itemData  = getItemByName(entry.itemName);
-    const rColor    = rarityColor(itemData?.Rarity);
-    return (
-      <View style={[styles.inventoryRow, { borderLeftColor: rColor }]}>
-        <View style={styles.inventoryTop}>
-          <View style={styles.inventoryTitleRow}>
-            <Text style={styles.inventoryName}>{entry.itemName}</Text>
-            {itemData?.Rarity && (
-              <Text style={[styles.rarityBadge, { color: rColor }]}>
-                {itemData.Rarity}
-              </Text>
-            )}
-          </View>
-          {itemData?.ObjectType && (
-            <Text style={styles.itemType}>{itemData.ObjectType}</Text>
-          )}
-        </View>
-
-        <View style={styles.inventoryControls}>
-          {/* Quantity */}
-          <View style={styles.controlGroup}>
-            <Text style={styles.controlLabel}>QTY</Text>
-            <TextInput
-              style={styles.controlInput}
-              keyboardType="numeric"
-              value={String(entry.quantity)}
-              onChangeText={(v) => handleQuantityChange(entry.itemName, v)}
-            />
-          </View>
-
-          {/* Charges */}
-          {entry.charges !== null && (
-            <View style={styles.controlGroup}>
-              <Text style={styles.controlLabel}>CHARGES</Text>
-              <View style={styles.chargeRow}>
-                <Ionicons name="flash" size={10} color={colors.gold} />
-                <TextInput
-                  style={[styles.controlInput, { color: colors.gold }]}
-                  keyboardType="numeric"
-                  value={String(entry.charges)}
-                  onChangeText={(v) => handleChargeChange(entry.itemName, v)}
-                />
-              </View>
-            </View>
-          )}
-
-          {/* Equip */}
-          <TouchableOpacity
-            style={[styles.equipButton, entry.equipped && styles.equipButtonActive]}
-            onPress={() => handleToggleEquip(entry.itemName)}
-          >
-            <Ionicons
-              name={entry.equipped ? 'shield-checkmark' : 'shield-outline'}
-              size={12}
-              color={entry.equipped ? colors.textPrimary : colors.textMuted}
-            />
-            <Text style={[styles.equipButtonText, entry.equipped && styles.equipButtonTextActive]}>
-              {entry.equipped ? 'Equipped' : 'Equip'}
+  const itemData = getItemByName(entry.itemName);
+  const rColor   = rarityColor(itemData?.Rarity);
+  return (
+    <TouchableOpacity
+      style={[styles.inventoryRow, { borderLeftColor: rColor }]}
+      onLongPress={() => setSelectedItem(itemData)}
+      delayLongPress={400}
+      activeOpacity={1}
+    >
+      <View style={styles.inventoryTop}>
+        <View style={styles.inventoryTitleRow}>
+          <Text style={styles.inventoryName}>{entry.itemName}</Text>
+          {itemData?.Rarity && (
+            <Text style={[styles.rarityBadge, { color: rColor }]}>
+              {itemData.Rarity}
             </Text>
-          </TouchableOpacity>
+          )}
         </View>
-
-        {entry.attuned && (
-          <View style={styles.attunedRow}>
-            <Ionicons name="sparkles" size={10} color={colors.gold} />
-            <Text style={styles.attunedText}>Attuned</Text>
-          </View>
+        {itemData?.ObjectType && (
+          <Text style={styles.itemType}>{itemData.ObjectType}</Text>
         )}
       </View>
-    );
-  };
+
+      <View style={styles.inventoryControls}>
+        {/* Quantity */}
+        <View style={styles.controlGroup}>
+          <Text style={styles.controlLabel}>QTY</Text>
+          <TextInput
+            style={styles.controlInput}
+            keyboardType="numeric"
+            value={String(entry.quantity)}
+            onChangeText={(v) => handleQuantityChange(entry.itemName, v)}
+          />
+        </View>
+
+        {/* Charges */}
+        {entry.charges !== null && (
+          <View style={styles.controlGroup}>
+            <Text style={styles.controlLabel}>CHARGES</Text>
+            <View style={styles.chargeRow}>
+              <Ionicons name="flash" size={10} color={colors.gold} />
+              <TextInput
+                style={[styles.controlInput, { color: colors.gold }]}
+                keyboardType="numeric"
+                value={String(entry.charges)}
+                onChangeText={(v) => handleChargeChange(entry.itemName, v)}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Equip */}
+        <TouchableOpacity
+          style={[styles.equipButton, entry.equipped && styles.equipButtonActive]}
+          onPress={() => handleToggleEquip(entry.itemName)}
+        >
+          <Ionicons
+            name={entry.equipped ? 'shield-checkmark' : 'shield-outline'}
+            size={12}
+            color={entry.equipped ? colors.textPrimary : colors.textMuted}
+          />
+          <Text style={[styles.equipButtonText, entry.equipped && styles.equipButtonTextActive]}>
+            {entry.equipped ? 'Equipped' : 'Equip'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {entry.attuned && (
+        <View style={styles.attunedRow}>
+          <Ionicons name="sparkles" size={10} color={colors.gold} />
+          <Text style={styles.attunedText}>Attuned</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+};
+
 
   return (
     <View style={sharedStyles.screen}>
@@ -261,7 +267,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceDeep,
+    borderBottomColor: colors.surfaceDeep2,
   },
   attunementText: {
     color: colors.gold,
@@ -369,7 +375,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   controlInput: {
-    backgroundColor: colors.surfaceDeep,
+    backgroundColor: colors.surfaceDeep2,
     color: colors.textPrimary,
     borderRadius: radius.sm,
     width: 44,
@@ -381,7 +387,7 @@ const styles = StyleSheet.create({
   equipButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceDeep,
+    backgroundColor: colors.surfaceDeep2,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
