@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { saveCharacter } from '../utils/CharacterStore';
+import { PUGILIST_CLASS } from '../data/pugilist_data';
 import { getItemByName } from '../utils/ItemStore';
 import {
   colors, spacing, radius, typography,
@@ -30,6 +31,9 @@ export default function OverviewScreen({ route }) {
   const [diceToSpend, setDiceToSpend]           = useState(1);
   const [lastRollResult, setLastRollResult]     = useState(null);
   const [equippedModalVisible, setEquippedModalVisible] = useState(false);
+  const [levelUpModalVisible, setLevelUpModalVisible] = useState(false);
+  const [characterLevel, setCharacterLevel]           = useState(character.level);
+
 
   // useRef avoids async state timing issues when opening the modal
   const selectedEquippedRef = useRef(null);
@@ -120,6 +124,37 @@ export default function OverviewScreen({ route }) {
     setRestModalVisible(false);
     Alert.alert('Long Rest', 'HP, Moxie, and Hit Dice fully restored.');
   };
+
+  const calcLevelUp = () => {
+  const newLevel     = characterLevel + 1;
+  const levelData    = PUGILIST_CLASS.levels[newLevel];
+  if (!levelData) return null; // already at max level
+  const hitDieAvg    = Math.floor(hitDieFaces / 2) + 1;
+  const hpIncrease   = Math.max(1, hitDieAvg + conMod);
+  const newHpMax     = character.hpMax + hpIncrease;
+  const newProfBonus = levelData.profBonus;
+  return { newLevel, newHpMax, hpIncrease, newProfBonus, levelData };
+};
+
+const doLevelUp = () => {
+  const calc = calcLevelUp();
+  if (!calc) return;
+  const { newLevel, newHpMax, hpIncrease, newProfBonus } = calc;
+  const newHpCurrent = hpCurrent + hpIncrease;
+  const newDiceRemaining = hitDiceRemaining + 1;
+  setCharacterLevel(newLevel);
+  setHpCurrent(newHpCurrent);
+  setHitDiceRemaining(newDiceRemaining);
+  persist({
+    level:            newLevel,
+    hpMax:            newHpMax,
+    hpCurrent:        newHpCurrent,
+    hitDiceRemaining: newDiceRemaining,
+    proficiencyBonus: newProfBonus,
+  });
+  setLevelUpModalVisible(false);
+};
+
 
   const getItemBonusSummary = (item) => {
     if (!item) return null;
@@ -297,13 +332,21 @@ export default function OverviewScreen({ route }) {
 
       </ScrollView>
 
-      {/* FLOATING REST BUTTON */}
-      <TouchableOpacity
-        style={styles.restFab}
-        onPress={() => setRestModalVisible(true)}
-      >
-        <Ionicons name="moon" size={22} color={colors.textPrimary} />
-      </TouchableOpacity>
+     {/* FLOATING BUTTONS */}
+<View style={styles.fabRow}>
+  <TouchableOpacity
+    style={[styles.fab, { backgroundColor: colors.gold }]}
+    onPress={() => setLevelUpModalVisible(true)}
+  >
+    <Ionicons name="arrow-up-circle" size={22} color={colors.background} />
+  </TouchableOpacity>
+  <TouchableOpacity
+    style={[styles.fab, { backgroundColor: colors.surfaceDeep }]}
+    onPress={() => setRestModalVisible(true)}
+  >
+    <Ionicons name="moon" size={22} color={colors.textPrimary} />
+  </TouchableOpacity>
+  </View>
 
       {/* HP MODAL */}
       <Modal visible={hpModalVisible} transparent animationType="slide">
@@ -472,6 +515,79 @@ export default function OverviewScreen({ route }) {
           </View>
         </View>
       </Modal>
+{/* LEVEL UP MODAL */}
+<Modal visible={levelUpModalVisible} transparent animationType="slide">
+  <View style={sharedStyles.modalOverlay}>
+    <View style={sharedStyles.modalBox}>
+      <Text style={sharedStyles.modalTitle}>Level Up</Text>
+      {(() => {
+        const calc = calcLevelUp();
+        if (!calc) return (
+          <Text style={styles.modalSub}>Already at maximum level!</Text>
+        );
+        const { newLevel, hpIncrease, newProfBonus, levelData } = calc;
+        return (
+          <>
+            <View style={styles.levelUpPreview}>
+              <View style={styles.levelUpRow}>
+                <Text style={styles.levelUpLabel}>Level</Text>
+                <Text style={styles.levelUpValue}>
+                  {characterLevel} → <Text style={{ color: colors.gold }}>{newLevel}</Text>
+                </Text>
+              </View>
+              <View style={styles.levelUpRow}>
+                <Text style={styles.levelUpLabel}>Hit Points</Text>
+                <Text style={styles.levelUpValue}>
+                  +<Text style={{ color: colors.success }}>{hpIncrease}</Text>
+                  <Text style={styles.levelUpMeta}>
+                    {' '}(avg d{hitDieFaces} {conMod >= 0 ? `+${conMod}` : conMod} CON)
+                  </Text>
+                </Text>
+              </View>
+              <View style={styles.levelUpRow}>
+                <Text style={styles.levelUpLabel}>Proficiency</Text>
+                <Text style={styles.levelUpValue}>
+                  +<Text style={{ color: colors.accentSoft }}>{newProfBonus}</Text>
+                </Text>
+              </View>
+              <View style={styles.levelUpRow}>
+                <Text style={styles.levelUpLabel}>Fisticuffs</Text>
+                <Text style={styles.levelUpValue}>
+                  <Text style={{ color: colors.accent }}>{levelData.fisticuffs}</Text>
+                </Text>
+              </View>
+              <View style={styles.levelUpRow}>
+                <Text style={styles.levelUpLabel}>Moxie Points</Text>
+                <Text style={styles.levelUpValue}>
+                  <Text style={{ color: colors.gold }}>{levelData.moxiePoints}</Text>
+                </Text>
+              </View>
+              {levelData.features?.length > 0 && (
+                <View style={styles.levelUpRow}>
+                  <Text style={styles.levelUpLabel}>New Features</Text>
+                  <Text style={[styles.levelUpValue, { flex: 1, flexWrap: 'wrap' }]}>
+                    {levelData.features.join(', ')}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[sharedStyles.primaryButton, { backgroundColor: colors.gold }]}
+              onPress={doLevelUp}
+            >
+              <Text style={[sharedStyles.primaryButtonText, { color: colors.background }]}>
+                Confirm Level Up to {newLevel}
+              </Text>
+            </TouchableOpacity>
+          </>
+        );
+      })()}
+      <TouchableOpacity onPress={() => setLevelUpModalVisible(false)}>
+        <Text style={sharedStyles.cancelText}>Cancel</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
 
     </View>
   );
@@ -688,18 +804,53 @@ const styles = StyleSheet.create({
   },
 
   // Rest FAB
-  restFab: {
-    position: 'absolute',
-    right: spacing.lg,
-    bottom: spacing.lg,
-    width: 50,
-    height: 50,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceDeep,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.card,
-  },
+ fabRow: {
+  position: 'absolute',
+  right: spacing.lg,
+  bottom: spacing.lg,
+  flexDirection: 'column',
+  gap: spacing.sm,
+},
+fab: {
+  width: 50,
+  height: 50,
+  borderRadius: radius.full,
+  alignItems: 'center',
+  justifyContent: 'center',
+  ...shadows.card,
+},
+
+// Level up modal
+levelUpPreview: {
+  backgroundColor: colors.surfaceDeep,
+  borderRadius: radius.sm,
+  padding: spacing.md,
+  marginBottom: spacing.md,
+  width: '100%',
+},
+levelUpRow: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  paddingVertical: spacing.xs,
+  borderBottomWidth: 1,
+  borderBottomColor: colors.surface,
+},
+levelUpLabel: {
+  color: colors.textMuted,
+  fontSize: 13,
+},
+levelUpValue: {
+  color: colors.textPrimary,
+  fontSize: 13,
+  fontWeight: 'bold',
+  textAlign: 'right',
+},
+levelUpMeta: {
+  color: colors.textMuted,
+  fontSize: 11,
+  fontWeight: 'normal',
+},
 
   // HP modal
   largeInput: {

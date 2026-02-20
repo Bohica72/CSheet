@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, ActivityIndicator, StatusBar
@@ -18,8 +19,10 @@ export default function CharacterList({ onSelectCharacter }) {
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  useFocusEffect(
+  useCallback(() => {
     (async () => {
+      setLoading(true);
       const data = await loadCharacters();
       if (data.length === 0) {
         const seeded = { ...sampleCharacter, id: 'char_' + Date.now() };
@@ -30,7 +33,9 @@ export default function CharacterList({ onSelectCharacter }) {
       }
       setLoading(false);
     })();
-  }, []);
+  }, [])
+);
+
 
   const handleAdd = async () => {
     const newChar = {

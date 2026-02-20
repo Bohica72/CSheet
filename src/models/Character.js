@@ -52,32 +52,39 @@ export class Character {
     return mod + (proficient ? this.proficiencyBonus : 0);
   }
 
-  getSkillBonus(skill) {
-    const abilityMap = {
-      athletics:      'str',
-      acrobatics:     'dex',
-      sleightofhand:  'dex',
-      stealth:        'dex',
-      arcana:         'int',
-      history:        'int',
-      investigation:  'int',
-      nature:         'int',
-      religion:       'int',
-      animalhandling: 'wis',
-      insight:        'wis',
-      medicine:       'wis',
-      perception:     'wis',
-      survival:       'wis',
-      deception:      'cha',
-      intimidation:   'cha',
-      performance:    'cha',
-      persuasion:     'cha',
-    };
-    const ability = abilityMap[skill];
-    const mod = this.getAbilityMod(ability);
-    const proficient = this.proficiencies.skills.includes(skill);
-    return mod + (proficient ? this.proficiencyBonus : 0);
-  }
+getSkillBonus(skill) {
+  const abilityMap = {
+    athletics:      'str',
+    acrobatics:     'dex',
+    sleightofhand:  'dex',
+    stealth:        'dex',
+    arcana:         'int',
+    history:        'int',
+    investigation:  'int',
+    nature:         'int',
+    religion:       'int',
+    animalhandling: 'wis',
+    insight:        'wis',
+    medicine:       'wis',
+    perception:     'wis',
+    survival:       'wis',
+    deception:      'cha',
+    intimidation:   'cha',
+    performance:    'cha',
+    persuasion:     'cha',
+  };
+  const ability  = abilityMap[skill];
+  const mod      = this.getAbilityMod(ability);
+  const expertise  = this.proficiencies?.expertise?.includes(skill);
+  const proficient = this.proficiencies?.skills?.includes(skill);
+  const profBonus  = expertise
+    ? this.proficiencyBonus * 2
+    : proficient
+      ? this.proficiencyBonus
+      : 0;
+  return mod + profBonus;
+}
+
 
   // --- Derived stats ---
 
