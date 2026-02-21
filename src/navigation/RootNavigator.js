@@ -4,6 +4,7 @@ import { colors } from '../styles/theme';
 
 import CharacterListScreen from '../screens/CharacterListScreen';
 import CharacterTabs from './CharacterTabs';
+import CharacterCreationWizard from '../screens/CharacterCreationWizard';
 
 const Stack = createNativeStackNavigator();
 
@@ -14,6 +15,23 @@ export default function RootNavigator() {
         name="Characters"
         component={CharacterListScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="CharacterCreation"
+        component={CharacterCreationWizard}
+        options={{
+          headerBackTitle: 'Characters',
+          headerTitle: 'New Character',
+          headerStyle: {
+            backgroundColor: colors.surface,
+            height: 36,
+          },
+          headerTintColor: colors.textMuted,
+          headerBackTitleStyle: {
+            fontSize: 11,
+          },
+          headerShadowVisible: false,
+        }}
       />
       <Stack.Screen
         name="Character"

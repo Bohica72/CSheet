@@ -1,23 +1,14 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import CharacterList from './CharacterList';
-import { colors } from '../styles/theme';
+import { useNavigation } from '@react-navigation/native';
+import CharacterList from '../screens/CharacterList';
 
-export default function CharacterListScreen({ navigation }) {
+export default function CharacterListScreen() {
+  const navigation = useNavigation();
+
   return (
-    <View style={styles.container}>
-      <CharacterList
-        onSelectCharacter={(character) => {
-          navigation.navigate('Character', { character });
-        }}
-      />
-    </View>
+    <CharacterList
+      onSelectCharacter={(character) => navigation.navigate('Character', { character })}
+      onCreateCharacter={() => navigation.navigate('CharacterCreation')}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-});

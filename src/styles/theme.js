@@ -3,11 +3,11 @@ export const colors = {
   background:   '#1e2326',
   surface:      '#2e383c',
   surfaceAlt:   '#384b55',
-  surfaceDeep:  '#9da9a0',
+  surfaceDeep:  '#2e383c',
   surfaceDeep2: '#3c4841',
 
   // Accent
-  accent:       '#7fbbb3',
+  accent:       '#2e383c',
   accentDim:    '#7a1020',
   accentSoft:   '#d3c6aa',
 

@@ -126,8 +126,22 @@ export default function SkillsScreen({ route }) {
   };
 
   // Toggle proficiency state for the skill being edited
+  // Set proficiency state directly (used by three-button modal UI)
+  const setProficiency = (skill, state) => {
+    if (!skill) return;
+    const newSkillProfs = {
+      skills:    skillProfs.skills.filter(s => s !== skill.key),
+      expertise: skillProfs.expertise.filter(s => s !== skill.key),
+    };
+    if (state === 'proficient') newSkillProfs.skills.push(skill.key);
+    if (state === 'expertise')  newSkillProfs.expertise.push(skill.key);
+    setSkillProfs(newSkillProfs);
+    persist(abilities, newSkillProfs);
+  };
+
+  // Cycle proficiency state (none → proficient → expertise → none)
   const toggleProficiency = () => {
-    const skill   = editingSkillRef.current;
+    const skill = editingSkillRef.current;
     if (!skill) return;
     const current = skillProfs.expertise.includes(skill.key)
       ? 'expertise'
@@ -135,17 +149,16 @@ export default function SkillsScreen({ route }) {
         ? 'proficient'
         : 'none';
     const next = nextProfState(current);
-
     const newSkillProfs = {
       skills:    skillProfs.skills.filter(s => s !== skill.key),
       expertise: skillProfs.expertise.filter(s => s !== skill.key),
     };
     if (next === 'proficient') newSkillProfs.skills.push(skill.key);
     if (next === 'expertise')  newSkillProfs.expertise.push(skill.key);
-
     setSkillProfs(newSkillProfs);
     persist(abilities, newSkillProfs);
   };
+
 
   return (
     <ScrollView

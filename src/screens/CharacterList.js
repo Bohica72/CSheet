@@ -11,7 +11,8 @@ import { Character } from '../models/Character';
 import { sampleCharacter } from '../data/sampleCharacter';
 import { colors, spacing, typography, radius, shadows, sharedStyles } from '../styles/theme';
 
-export default function CharacterList({ onSelectCharacter }) {
+// Change the function signature to accept the new prop
+export default function CharacterList({ onSelectCharacter, onCreateCharacter }) {
   const [characters, setCharacters]         = useState([]);
   const [loading, setLoading]               = useState(true);
   const [actionModalVisible, setActionModalVisible] = useState(false);
@@ -36,15 +37,10 @@ export default function CharacterList({ onSelectCharacter }) {
     }, [])
   );
 
-  const handleAdd = async () => {
-    const newChar = {
-      ...sampleCharacter,
-      id:   'char_' + Date.now(),
-      name: 'New Pugilist ' + (characters.length + 1),
-    };
-    const updated = await addCharacter(newChar);
-    setCharacters(updated);
-  };
+  const handleAdd = () => {
+  onCreateCharacter();
+};
+
 
   const handleLongPress = (item) => {
     selectedCharRef.current = item;
@@ -156,20 +152,26 @@ export default function CharacterList({ onSelectCharacter }) {
                   : ''}
               </Text>
               <View style={styles.quickStats}>
-                <StatPip label="HP"    value={item.hpMax ?? '—'} />
-                <StatPip label="AC"    value={item.ac ?? '—'} />
-                <StatPip label="Moxie" value={item.moxieMax ?? '—'} color={colors.gold} />
-              </View>
+  <StatPip label="HP"    value={item.hpMax ?? '—'} />
+  <StatPip label="AC"    value={item.ac ?? '—'} />
+  {item.race
+    ? <StatPip label="Race" value={item.race} />
+    : null
+  }
+</View>
+
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={styles.cardChevron} />
           </TouchableOpacity>
         )}
       />
 
-      {/* Add FAB */}
-      <TouchableOpacity style={styles.fab} onPress={handleAdd}>
-        <Ionicons name="add" size={28} color={colors.textPrimary} />
-      </TouchableOpacity>
+  {/* Add FAB */}
+<TouchableOpacity style={styles.fab} onPress={onCreateCharacter}>
+  <Ionicons name="add" size={28} color={colors.textPrimary} />
+</TouchableOpacity>
+
+
 
       {/* ACTION MODAL — rename or delete */}
       <Modal visible={actionModalVisible} transparent animationType="fade">
@@ -178,9 +180,17 @@ export default function CharacterList({ onSelectCharacter }) {
             <Text style={sharedStyles.modalTitle}>
               {selectedCharRef.current?.name}
             </Text>
-            <Text style={styles.actionSub}>
-              Level {selectedCharRef.current?.level ?? 1} · {selectedCharRef.current?.classId ?? 'Pugilist'}
-            </Text>
+           <Text style={styles.actionSub}>
+  Level {selectedCharRef.current?.level ?? 1}
+  {' · '}
+  {selectedCharRef.current?.classId
+    ? selectedCharRef.current.classId.charAt(0).toUpperCase() + selectedCharRef.current.classId.slice(1)
+    : 'Adventurer'}
+  {selectedCharRef.current?.race
+    ? ` · ${selectedCharRef.current.race}`
+    : ''}
+</Text>
+
 
             <TouchableOpacity style={styles.actionButton} onPress={openRename}>
               <Ionicons name="pencil-outline" size={20} color={colors.accentSoft} />

@@ -5,16 +5,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { saveCharacter } from '../utils/CharacterStore';
-import { PUGILIST_CLASS } from '../data/pugilist_data';
 import { getItemByName } from '../utils/ItemStore';
 import { initWeaponStore } from '../utils/WeaponStore';
+import { Character } from '../models/Character';
 import {
   colors, spacing, radius, typography,
   shadows, sharedStyles
 } from '../styles/theme';
-import ItemCard from '../components/ItemCard';
-import { Character } from '../models/Character';
-
 
 function rollDie(faces) {
   return Math.floor(Math.random() * faces) + 1;
@@ -33,10 +30,9 @@ function BreakdownRow({ label, value, isTotal }) {
   );
 }
 
-export default function OverviewScreen({ route }) {
-  const raw = route.params.character;
+export default function OverviewScreen({ route, onRegisterActions }) {
+  const raw       = route.params.character;
   const character = raw instanceof Character ? raw : new Character(raw);
-
 
   const [hpCurrent, setHpCurrent]               = useState(character.hpCurrent);
   const [hpTemp, setHpTemp]                     = useState(character.hpTemp ?? 0);
@@ -57,12 +53,19 @@ export default function OverviewScreen({ route }) {
   const [overrideInput, setOverrideInput]                 = useState('');
   const [weaponStoreReady, setWeaponStoreReady]           = useState(false);
 
-  const breakdownRef       = useRef(null);
-  const overrideKeyRef     = useRef(null);
+  const breakdownRef        = useRef(null);
+  const overrideKeyRef      = useRef(null);
   const selectedEquippedRef = useRef(null);
 
   useEffect(() => {
     initWeaponStore().then(() => setWeaponStoreReady(true));
+  }, []);
+
+  useEffect(() => {
+    onRegisterActions?.({
+      openRest:    () => setRestModalVisible(true),
+      openLevelUp: () => setLevelUpModalVisible(true),
+    });
   }, []);
 
   const equippedAttacks = weaponStoreReady
@@ -75,8 +78,6 @@ export default function OverviewScreen({ route }) {
   const conMod      = character.getAbilityMod('con');
   const hpPercent   = Math.max(0, hpCurrent / character.hpMax);
   const equippedItems = (character.inventory ?? []).filter(i => i.equipped);
-
-
 
   const persist = async (updates) => {
     Object.assign(character, updates);
@@ -155,16 +156,30 @@ export default function OverviewScreen({ route }) {
     Alert.alert('Long Rest', 'HP, Moxie, and Hit Dice fully restored.');
   };
 
-  const calcLevelUp = () => {
-    const newLevel     = characterLevel + 1;
-    const levelData    = PUGILIST_CLASS.levels[newLevel];
-    if (!levelData) return null;
-    const hitDieAvg    = Math.floor(hitDieFaces / 2) + 1;
-    const hpIncrease   = Math.max(1, hitDieAvg + conMod);
-    const newHpMax     = character.hpMax + hpIncrease;
-    const newProfBonus = levelData.profBonus;
-    return { newLevel, newHpMax, hpIncrease, newProfBonus, levelData };
+const calcLevelUp = () => {
+  const newLevel  = characterLevel + 1;
+  if (newLevel > 20) return null;
+
+  const classData    = character.getClassData?.();
+  const levelData    = classData?.levels?.[newLevel];
+  const newProfBonus = character._calcProfBonus(newLevel);
+  const hitDieAvg    = Math.floor(hitDieFaces / 2) + 1;
+  const hpIncrease   = Math.max(1, hitDieAvg + conMod);
+  const newHpMax     = character.hpMax + hpIncrease;
+
+  return {
+    newLevel,
+    newHpMax,
+    hpIncrease,
+    newProfBonus,
+    levelData: levelData ?? {
+      fisticuffs:  '—',
+      moxiePoints: 0,
+      features:    [],
+    },
   };
+};
+
 
   const doLevelUp = () => {
     const calc = calcLevelUp();
@@ -227,35 +242,37 @@ export default function OverviewScreen({ route }) {
 
         {/* TOP CARDS ROW */}
         <View style={styles.cardRow}>
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => setHitDiceModalVisible(true)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.cardLabel}>HIT DICE</Text>
-            <Text style={styles.cardValue}>{hitDiceRemaining}</Text>
-            <Text style={styles.cardSub}>of {character.level} d{hitDieFaces}</Text>
-          </TouchableOpacity>
+  <TouchableOpacity
+    style={styles.card}
+    onPress={() => setHitDiceModalVisible(true)}
+    activeOpacity={0.8}
+  >
+    <Text style={styles.cardLabel}>HIT DICE</Text>
+    <Text style={styles.cardValue}>{hitDiceRemaining}</Text>
+    <Text style={styles.cardSub}>of {character.level} d{hitDieFaces}</Text>
+  </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.card, styles.cardGold]}
-            onPress={() => {
-              const newVal = Math.max(0, moxie - 1);
-              setMoxie(newVal);
-              persist({ moxieCurrent: newVal });
-            }}
-            onLongPress={() => {
-              const newVal = Math.min(moxieMax, moxie + 1);
-              setMoxie(newVal);
-              persist({ moxieCurrent: newVal });
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.cardLabel}>MOXIE</Text>
-            <Text style={[styles.cardValue, { color: colors.gold }]}>{moxie}</Text>
-            <Text style={styles.cardSub}>/ {moxieMax}</Text>
-          </TouchableOpacity>
-        </View>
+  {moxieMax > 0 && (
+    <TouchableOpacity
+      style={[styles.card, styles.cardGold]}
+      onPress={() => {
+        const newVal = Math.max(0, moxie - 1);
+        setMoxie(newVal);
+        persist({ moxieCurrent: newVal });
+      }}
+      onLongPress={() => {
+        const newVal = Math.min(moxieMax, moxie + 1);
+        setMoxie(newVal);
+        persist({ moxieCurrent: newVal });
+      }}
+      activeOpacity={0.8}
+    >
+      <Text style={styles.cardLabel}>MOXIE</Text>
+      <Text style={[styles.cardValue, { color: colors.gold }]}>{moxie}</Text>
+      <Text style={styles.cardSub}>/ {moxieMax}</Text>
+    </TouchableOpacity>
+  )}
+</View>
 
         {/* STATS GRID */}
         <Text style={sharedStyles.sectionHeader}>Combat Stats</Text>
@@ -306,40 +323,39 @@ export default function OverviewScreen({ route }) {
         <Text style={sharedStyles.sectionHeader}>Attacks</Text>
 
         {(() => {
-  const unarmed = character.getUnarmedAttack();
-  if (!unarmed) return null;
-  return (
-    <TouchableOpacity
-      style={styles.attackRow}
-        onLongPress={() => {
-         breakdownRef.current = {
-        type:        'attack',
-        ...unarmed,
-    attackTotal: unarmed.attackBonus,  // ← map it explicitly
-  };
-  setBreakdownModalVisible(true);
-}}
-
-      delayLongPress={400}
-      activeOpacity={0.7}
-    >
-      <View style={styles.attackNameCol}>
-        <Text style={styles.attackName}>{unarmed.name}</Text>
-        <Text style={styles.attackTag}>{unarmed.tag} · hold for breakdown</Text>
-      </View>
-      <View style={styles.attackStatCol}>
-        <Text style={styles.attackStatLabel}>ATK</Text>
-        <Text style={styles.attackStat}>+{unarmed.attackBonus}</Text>
-      </View>
-      <View style={styles.attackStatCol}>
-        <Text style={styles.attackStatLabel}>DMG</Text>
-        <Text style={styles.attackStat}>
-          {unarmed.damageDie}+{unarmed.damageBonus}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-})()}
+          const unarmed = character.getUnarmedAttack();
+          if (!unarmed) return null;
+          return (
+            <TouchableOpacity
+              style={styles.attackRow}
+              onLongPress={() => {
+                breakdownRef.current = {
+                  type:        'attack',
+                  ...unarmed,
+                  attackTotal: unarmed.attackBonus,
+                };
+                setBreakdownModalVisible(true);
+              }}
+              delayLongPress={400}
+              activeOpacity={0.7}
+            >
+              <View style={styles.attackNameCol}>
+                <Text style={styles.attackName}>{unarmed.name}</Text>
+                <Text style={styles.attackTag}>{unarmed.tag} · hold for breakdown</Text>
+              </View>
+              <View style={styles.attackStatCol}>
+                <Text style={styles.attackStatLabel}>ATK</Text>
+                <Text style={styles.attackStat}>+{unarmed.attackBonus}</Text>
+              </View>
+              <View style={styles.attackStatCol}>
+                <Text style={styles.attackStatLabel}>DMG</Text>
+                <Text style={styles.attackStat}>
+                  {unarmed.damageDie}+{unarmed.damageBonus}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })()}
 
         {equippedAttacks.map((atk, i) => (
           <TouchableOpacity
@@ -347,15 +363,15 @@ export default function OverviewScreen({ route }) {
             style={[styles.attackRow, styles.attackRowWeapon]}
             onLongPress={() => {
               breakdownRef.current = {
-                type:        'attack',
-                name:        atk.name,
-                strMod:      atk.strMod,
-                profBonus:   character.proficiencyBonus,
+                type:         'attack',
+                name:         atk.name,
+                strMod:       atk.strMod,
+                profBonus:    character.proficiencyBonus,
                 isProficient: atk.isProficient,
-                magicBonus:  atk.magicBonus,
-                attackTotal: atk.attackBonus,
-                damageDie:   atk.damageDie,
-                damageBonus: atk.damageBonus,
+                magicBonus:   atk.magicBonus,
+                attackTotal:  atk.attackBonus,
+                damageDie:    atk.damageDie,
+                damageBonus:  atk.damageBonus,
               };
               setBreakdownModalVisible(true);
             }}
@@ -414,22 +430,6 @@ export default function OverviewScreen({ route }) {
         )}
 
       </ScrollView>
-
-      {/* FLOATING BUTTONS */}
-      <View style={styles.fabRow}>
-        <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.gold }]}
-          onPress={() => setLevelUpModalVisible(true)}
-        >
-          <Ionicons name="arrow-up-circle" size={18} color={colors.background} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.surfaceDeep }]}
-          onPress={() => setRestModalVisible(true)}
-        >
-          <Ionicons name="moon" size={18} color={colors.textPrimary} />
-        </TouchableOpacity>
-      </View>
 
       {/* HP MODAL */}
       <Modal visible={hpModalVisible} transparent animationType="slide">
@@ -699,7 +699,7 @@ export default function OverviewScreen({ route }) {
                   {breakdownRef.current.magicBonus > 0 && (
                     <BreakdownRow label="Magic Bonus" value={`+${breakdownRef.current.magicBonus}`} />
                   )}
-                  <BreakdownRow label="Damage Bonus" value={`+${breakdownRef.current.damageBonus}`} isTotal />
+                  <BreakdownRow label="Total Bonus" value={`+${breakdownRef.current.damageBonus}`} isTotal />
                 </View>
               </>
             ) : (
@@ -1029,23 +1029,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 13,
     lineHeight: 20,
-  },
-
-  // FABs
-  fabRow: {
-    position: 'absolute',
-    top: spacing.sm,
-    right: spacing.md,
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  fab: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.card,
   },
 
   // Breakdown modal

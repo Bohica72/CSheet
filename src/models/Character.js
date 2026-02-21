@@ -5,73 +5,120 @@ import { getClassById } from '../utils/ClassStore';
 
 export class Character {
   constructor(data) {
-    this.id = data.id;
-    this.name = data.name;
-    this.level = data.level ?? 1;
-    this.classId = data.classId ?? 'pugilist';
-    this.subclassId = data.subclassId ?? null;
-    this.abilities = data.abilities;
-    this.proficiencyBonus = data.proficiencyBonus;
-    this.proficiencies = data.proficiencies;
-    this.bonuses = data.bonuses ?? {};
+    this.id          = data.id;
+    this.name        = data.name;
+    this.level       = data.level ?? 1;
+    this.classId     = data.classId ?? 'pugilist';
+    this.subclassId  = data.subclassId ?? null;
+    this.race        = data.race ?? null;
+    this.raceSource  = data.raceSource ?? null;
+    this.background  = data.background ?? null;
+    this.classSource = data.classSource ?? null;
+
+    // Accept abilities as either a nested object OR flat fields
+    // Wizard saves nested, legacy data may save flat — handle both
+    if (data.abilities) {
+      this.abilities = data.abilities;
+    } else {
+      this.abilities = {
+        str: data.str ?? 10,
+        dex: data.dex ?? 10,
+        con: data.con ?? 10,
+        int: data.int ?? 10,
+        wis: data.wis ?? 10,
+        cha: data.cha ?? 10,
+      };
+    }
+
+    // Proficiency bonus — calculate from level if not stored
+    this.proficiencyBonus = data.proficiencyBonus ?? this._calcProfBonus(data.level ?? 1);
+
+    // Proficiencies — default empty structure if not set
+    this.proficiencies = data.proficiencies ?? {
+      saves:     [],
+      skills:    [],
+      expertise: [],
+      weapons:   [],
+      armor:     [],
+    };
+
+    this.bonuses      = data.bonuses ?? {};
     this.moxieCurrent = data.moxieCurrent ?? null;
+    this.skills       = data.skills ?? {};
+    this.spellcastingAbility = data.spellcastingAbility ?? null;
 
     // HP
-    this.hpMax = data.hpMax ?? 10;
-    this.hpCurrent = data.hpCurrent ?? this.hpMax;
-    this.hpTemp = data.hpTemp ?? 0;
+    this.hpMax            = data.hpMax ?? 10;
+    this.hpCurrent        = data.hpCurrent ?? this.hpMax;
+    this.hpTemp           = data.hpTemp ?? 0;
     this.hitDiceRemaining = data.hitDiceRemaining ?? this.level;
 
     // Combat
-    this.speed = data.speed ?? 30;
+    this.speed       = data.speed ?? 30;
+    this.darkvision  = data.darkvision ?? 0;
     this.inspiration = data.inspiration ?? 0;
 
     // Inventory & attacks
-    this.inventory = data.inventory ?? [];
+    this.inventory    = data.inventory ?? [];
     this.attunedItems = data.attunedItems ?? [];
-    this.attacks = data.attacks ?? [];
-    this.overrides = data.overrides ?? {};
+    this.attacks      = data.attacks ?? [];
+    this.overrides    = data.overrides ?? {};
   }
 
-getUnarmedAttack() {
-  const classData = getClassById(this.classId);
-  if (!classData) return null;
+  // ─── Proficiency bonus ───────────────────────────────────────────────────────
 
-  const damageDie = classData.levels?.[this.level]?.fisticuffs
-    ?? classData.unarmedDie
-    ?? '1d4';
+  _calcProfBonus(level) {
+    if (level >= 17) return 6;
+    if (level >= 13) return 5;
+    if (level >= 9)  return 4;
+    if (level >= 5)  return 3;
+    return 2;
+  }
 
-  return {
-    name:         classData.unarmedAttackName ?? 'Unarmed Strike',
-    tag:          classData.unarmedAttackTag  ?? 'Unarmed',
-    damageDie,
-    damageBonus:  this.getAbilityMod('str'),
-    attackBonus:  this.getMeleeAttackBonus(),
-    isProficient: true,
-    magicBonus:   0,
-    strMod:       this.getAbilityMod('str'),
-    profBonus:    this.proficiencyBonus,
-  };
-}
+  // ─── Class data ───────────────────────────────────────────────────────────────
 
-  // --- Ability scores ---
+  getClassData() {
+    return getClassById(this.classId);
+  }
+
+  getUnarmedAttack() {
+    const classData = getClassById(this.classId);
+    if (!classData) return null;
+
+    const damageDie = classData.levels?.[this.level]?.fisticuffs
+      ?? classData.unarmedDie
+      ?? '1d4';
+
+    return {
+      name:         classData.unarmedAttackName ?? 'Unarmed Strike',
+      tag:          classData.unarmedAttackTag  ?? 'Unarmed',
+      damageDie,
+      damageBonus:  this.getAbilityMod('str'),
+      attackBonus:  this.getMeleeAttackBonus(),
+      isProficient: true,
+      magicBonus:   0,
+      strMod:       this.getAbilityMod('str'),
+      profBonus:    this.proficiencyBonus,
+    };
+  }
+
+  // ─── Ability scores ───────────────────────────────────────────────────────────
 
   getAbilityScore(ability) {
-    const base = this.abilities?.[ability] ?? 10;
+    const base  = this.abilities?.[ability] ?? 10;
     const bonus = this.bonuses?.abilities?.[ability] ?? 0;
     return base + bonus;
   }
 
   getAbilityMod(ability) {
-    const score = this.getAbilityScore(ability);
-    return Math.floor((score - 10) / 2);
+    return Math.floor((this.getAbilityScore(ability) - 10) / 2);
   }
 
-  // --- Saves & skills ---
+  // ─── Saves & skills ───────────────────────────────────────────────────────────
 
   getSaveBonus(ability) {
-    const mod = this.getAbilityMod(ability);
-    const proficient = this.proficiencies.saves.includes(ability);
+    const mod        = this.getAbilityMod(ability);
+    const proficient = this.proficiencies?.saves?.includes(ability);
     return mod + (proficient ? this.proficiencyBonus : 0);
   }
 
@@ -108,7 +155,7 @@ getUnarmedAttack() {
     return mod + profBonus;
   }
 
-  // --- Derived stats ---
+  // ─── Derived stats ────────────────────────────────────────────────────────────
 
   getInitiativeBonus() {
     return this.getAbilityMod('dex');
@@ -119,26 +166,22 @@ getUnarmedAttack() {
   }
 
   getArmorClass() {
-    const dexMod = this.getAbilityMod('dex');
-    const conMod = this.getAbilityMod('con');
-
     if (this.overrides?.ac !== undefined) {
       return this.overrides.ac;
     }
 
+    const dexMod  = this.getAbilityMod('dex');
+    const conMod  = this.getAbilityMod('con');
     const equipped = (this.inventory ?? []).filter(e => e.equipped);
-    let armorItem  = null;
-    let hasShield  = false;
+    let armorItem = null;
+    let hasShield = false;
 
     for (const entry of equipped) {
       const item = getItemByName(entry.itemName);
       if (!item) continue;
       const type = (item.ObjectType ?? '').toLowerCase();
-      if (type.includes('shield')) {
-        hasShield = true;
-      } else if (type.includes('armor')) {
-        armorItem = item;
-      }
+      if (type.includes('shield'))     hasShield = true;
+      else if (type.includes('armor')) armorItem = item;
     }
 
     let base = 0, dexApplied = 0;
@@ -177,11 +220,11 @@ getUnarmedAttack() {
       };
     }
 
-    const dexMod   = this.getAbilityMod('dex');
-    const conMod   = this.getAbilityMod('con');
+    const dexMod  = this.getAbilityMod('dex');
+    const conMod  = this.getAbilityMod('con');
     const equipped = (this.inventory ?? []).filter(e => e.equipped);
-    let armorItem  = null;
-    let hasShield  = false;
+    let armorItem = null;
+    let hasShield = false;
 
     for (const entry of equipped) {
       const item = getItemByName(entry.itemName);
@@ -228,35 +271,36 @@ getUnarmedAttack() {
     };
   }
 
-  // --- Moxie ---
+  // ─── Moxie ────────────────────────────────────────────────────────────────────
 
   getMoxieMax() {
-  const classData = getClassById(this.classId);
-  return classData?.levels[this.level]?.moxiePoints ?? 0;
-}
+    const classData = getClassById(this.classId);
+    return classData?.levels?.[this.level]?.moxiePoints ?? 0;
+  }
 
-getMoxieCurrent() {
-  return this.moxieCurrent ?? this.getMoxieMax();
-}
+  getMoxieCurrent() {
+    return this.moxieCurrent ?? this.getMoxieMax();
+  }
 
-getHitDice() {
-  const classData = getClassById(this.classId);
-  const faces = classData?.hitDie ?? 8;
-  return `${this.level}d${faces}`;
-}
+  // ─── Hit dice ─────────────────────────────────────────────────────────────────
 
-getFisticuffsDie() {
-  const classData = getClassById(this.classId);
-  return classData?.levels[this.level]?.fisticuffs ?? '1d4';
-}
+  getHitDice() {
+    const classData = getClassById(this.classId);
+    const faces     = classData?.hitDie ?? 8;
+    return `${this.level}d${faces}`;
+  }
 
-  // --- Attack helpers ---
+  getFisticuffsDie() {
+    const classData = getClassById(this.classId);
+    return classData?.levels?.[this.level]?.fisticuffs ?? '1d4';
+  }
+
+  // ─── Attack helpers ───────────────────────────────────────────────────────────
 
   getMeleeAttackBonus() {
     return this.getAbilityMod('str') + this.proficiencyBonus;
   }
 
- // ... previous code
   getEquippedWeaponAttacks() {
     return this.inventory
       .filter(entry => {
@@ -284,32 +328,37 @@ getFisticuffsDie() {
       });
   }
 
-
-
-  // --- Serialisation ---
+  // ─── Serialisation ────────────────────────────────────────────────────────────
 
   toJSON() {
     return {
-      id:               this.id,
-      name:             this.name,
-      level:            this.level,
-      classId:          this.classId,
-      subclassId:       this.subclassId,
-      abilities:        this.abilities,
-      proficiencyBonus: this.proficiencyBonus,
-      proficiencies:    this.proficiencies,
-      bonuses:          this.bonuses,
-      moxieCurrent:     this.moxieCurrent,
-      hpMax:            this.hpMax,
-      hpCurrent:        this.hpCurrent,
-      hpTemp:           this.hpTemp,
-      hitDiceRemaining: this.hitDiceRemaining,
-      speed:            this.speed,
-      inspiration:      this.inspiration,
-      inventory:        this.inventory,
-      attunedItems:     this.attunedItems,
-      attacks:          this.attacks,
-      overrides:        this.overrides,
+      id:                  this.id,
+      name:                this.name,
+      level:               this.level,
+      classId:             this.classId,
+      classSource:         this.classSource,
+      subclassId:          this.subclassId,
+      race:                this.race,
+      raceSource:          this.raceSource,
+      background:          this.background,
+      abilities:           this.abilities,
+      proficiencyBonus:    this.proficiencyBonus,
+      proficiencies:       this.proficiencies,
+      skills:              this.skills,
+      bonuses:             this.bonuses,
+      moxieCurrent:        this.moxieCurrent,
+      spellcastingAbility: this.spellcastingAbility,
+      hpMax:               this.hpMax,
+      hpCurrent:           this.hpCurrent,
+      hpTemp:              this.hpTemp,
+      hitDiceRemaining:    this.hitDiceRemaining,
+      speed:               this.speed,
+      darkvision:          this.darkvision,
+      inspiration:         this.inspiration,
+      inventory:           this.inventory,
+      attunedItems:        this.attunedItems,
+      attacks:             this.attacks,
+      overrides:           this.overrides,
     };
   }
 }
