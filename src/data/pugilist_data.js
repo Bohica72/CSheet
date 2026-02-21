@@ -5,6 +5,8 @@ export const PUGILIST_CLASS = {
   saves: ['str', 'con'],
   armorProf: ['Light Armor'],
   weaponProf: ['Simple Weapons', 'Improvised Weapons', 'Whip', 'Derringer'],
+  unarmedAttackName:  'Fisticuffs',
+  unarmedAttackTag:   'Unarmed',
 
   // Level table: level → { profBonus, fisticuffs, moxiePoints, features[] }
   levels: {

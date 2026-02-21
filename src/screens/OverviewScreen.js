@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, TextInput,
   StyleSheet, ScrollView, Alert
@@ -7,17 +7,36 @@ import { Ionicons } from '@expo/vector-icons';
 import { saveCharacter } from '../utils/CharacterStore';
 import { PUGILIST_CLASS } from '../data/pugilist_data';
 import { getItemByName } from '../utils/ItemStore';
+import { initWeaponStore } from '../utils/WeaponStore';
 import {
   colors, spacing, radius, typography,
   shadows, sharedStyles
 } from '../styles/theme';
 import ItemCard from '../components/ItemCard';
+import { Character } from '../models/Character';
+
+
 function rollDie(faces) {
   return Math.floor(Math.random() * faces) + 1;
 }
 
+function BreakdownRow({ label, value, isTotal }) {
+  return (
+    <View style={[styles.breakdownRow, isTotal && styles.breakdownRowTotal]}>
+      <Text style={[styles.breakdownLabel, isTotal && styles.breakdownLabelTotal]}>
+        {label}
+      </Text>
+      <Text style={[styles.breakdownValue, isTotal && styles.breakdownValueTotal]}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 export default function OverviewScreen({ route }) {
-  const { character } = route.params;
+  const raw = route.params.character;
+  const character = raw instanceof Character ? raw : new Character(raw);
+
 
   const [hpCurrent, setHpCurrent]               = useState(character.hpCurrent);
   const [hpTemp, setHpTemp]                     = useState(character.hpTemp ?? 0);
@@ -31,21 +50,33 @@ export default function OverviewScreen({ route }) {
   const [diceToSpend, setDiceToSpend]           = useState(1);
   const [lastRollResult, setLastRollResult]     = useState(null);
   const [equippedModalVisible, setEquippedModalVisible] = useState(false);
-  const [levelUpModalVisible, setLevelUpModalVisible] = useState(false);
-  const [characterLevel, setCharacterLevel]           = useState(character.level);
+  const [levelUpModalVisible, setLevelUpModalVisible]   = useState(false);
+  const [characterLevel, setCharacterLevel]             = useState(character.level);
+  const [breakdownModalVisible, setBreakdownModalVisible] = useState(false);
+  const [overrideModalVisible, setOverrideModalVisible]   = useState(false);
+  const [overrideInput, setOverrideInput]                 = useState('');
+  const [weaponStoreReady, setWeaponStoreReady]           = useState(false);
 
-
-  // useRef avoids async state timing issues when opening the modal
+  const breakdownRef       = useRef(null);
+  const overrideKeyRef     = useRef(null);
   const selectedEquippedRef = useRef(null);
+
+  useEffect(() => {
+    initWeaponStore().then(() => setWeaponStoreReady(true));
+  }, []);
+
+  const equippedAttacks = weaponStoreReady
+    ? (character.getEquippedWeaponAttacks?.() ?? [])
+    : [];
 
   const moxieMax    = character.getMoxieMax();
   const hitDice     = character.getHitDice();
   const hitDieFaces = parseInt(hitDice.split('d')[1], 10);
   const conMod      = character.getAbilityMod('con');
   const hpPercent   = Math.max(0, hpCurrent / character.hpMax);
+  const equippedItems = (character.inventory ?? []).filter(i => i.equipped);
 
-  const equippedItems   = (character.inventory ?? []).filter(i => i.equipped);
-  const equippedAttacks = character.getEquippedWeaponAttacks?.() ?? [];
+
 
   const persist = async (updates) => {
     Object.assign(character, updates);
@@ -58,7 +89,6 @@ export default function OverviewScreen({ route }) {
       ? colors.warning
       : colors.accent;
 
-  // Temp HP absorbs damage first, overflow carries to real HP
   const applyHp = (mode) => {
     const val = parseInt(hpInput, 10);
     if (isNaN(val) || val <= 0) return;
@@ -74,7 +104,7 @@ export default function OverviewScreen({ route }) {
         newHp = Math.max(0, newHp - val);
       }
     }
-    if (mode === 'healing') newHp  = Math.min(character.hpMax, hpCurrent + val);
+    if (mode === 'healing') newHp   = Math.min(character.hpMax, hpCurrent + val);
     if (mode === 'temp')    newTemp = val;
     setHpCurrent(newHp);
     setHpTemp(newTemp);
@@ -126,35 +156,34 @@ export default function OverviewScreen({ route }) {
   };
 
   const calcLevelUp = () => {
-  const newLevel     = characterLevel + 1;
-  const levelData    = PUGILIST_CLASS.levels[newLevel];
-  if (!levelData) return null; // already at max level
-  const hitDieAvg    = Math.floor(hitDieFaces / 2) + 1;
-  const hpIncrease   = Math.max(1, hitDieAvg + conMod);
-  const newHpMax     = character.hpMax + hpIncrease;
-  const newProfBonus = levelData.profBonus;
-  return { newLevel, newHpMax, hpIncrease, newProfBonus, levelData };
-};
+    const newLevel     = characterLevel + 1;
+    const levelData    = PUGILIST_CLASS.levels[newLevel];
+    if (!levelData) return null;
+    const hitDieAvg    = Math.floor(hitDieFaces / 2) + 1;
+    const hpIncrease   = Math.max(1, hitDieAvg + conMod);
+    const newHpMax     = character.hpMax + hpIncrease;
+    const newProfBonus = levelData.profBonus;
+    return { newLevel, newHpMax, hpIncrease, newProfBonus, levelData };
+  };
 
-const doLevelUp = () => {
-  const calc = calcLevelUp();
-  if (!calc) return;
-  const { newLevel, newHpMax, hpIncrease, newProfBonus } = calc;
-  const newHpCurrent = hpCurrent + hpIncrease;
-  const newDiceRemaining = hitDiceRemaining + 1;
-  setCharacterLevel(newLevel);
-  setHpCurrent(newHpCurrent);
-  setHitDiceRemaining(newDiceRemaining);
-  persist({
-    level:            newLevel,
-    hpMax:            newHpMax,
-    hpCurrent:        newHpCurrent,
-    hitDiceRemaining: newDiceRemaining,
-    proficiencyBonus: newProfBonus,
-  });
-  setLevelUpModalVisible(false);
-};
-
+  const doLevelUp = () => {
+    const calc = calcLevelUp();
+    if (!calc) return;
+    const { newLevel, newHpMax, hpIncrease, newProfBonus } = calc;
+    const newHpCurrent     = hpCurrent + hpIncrease;
+    const newDiceRemaining = hitDiceRemaining + 1;
+    setCharacterLevel(newLevel);
+    setHpCurrent(newHpCurrent);
+    setHitDiceRemaining(newDiceRemaining);
+    persist({
+      level:            newLevel,
+      hpMax:            newHpMax,
+      hpCurrent:        newHpCurrent,
+      hitDiceRemaining: newDiceRemaining,
+      proficiencyBonus: newProfBonus,
+    });
+    setLevelUpModalVisible(false);
+  };
 
   const getItemBonusSummary = (item) => {
     if (!item) return null;
@@ -232,12 +261,23 @@ const doLevelUp = () => {
         <Text style={sharedStyles.sectionHeader}>Combat Stats</Text>
         <View style={styles.grid}>
           {[
-            { label: 'AC',          value: character.getArmorClass(),             color: colors.accentSoft },
-            { label: 'Initiative',  value: `+${character.getInitiativeBonus()}`,  color: colors.accentSoft },
-            { label: 'Prof.',       value: `+${character.proficiencyBonus}`,       color: colors.accentSoft },
+            {
+              label: 'AC',
+              value: character.getArmorClass(),
+              color: colors.accentSoft,
+              onLongPress: () => {
+                breakdownRef.current = character.getACBreakdown();
+                setBreakdownModalVisible(true);
+              }
+            },
+            { label: 'Initiative',  value: `+${character.getInitiativeBonus()}`, color: colors.accentSoft },
+            { label: 'Prof.',       value: `+${character.proficiencyBonus}`,      color: colors.accentSoft },
             { label: 'Speed',       value: `${character.speed}ft`,                color: colors.accentSoft },
-            { label: 'Pass. Perc', value: character.getPassivePerception(),        color: colors.accentSoft },
-            { label: 'Inspiration', value: inspiration ? '✦' : '—',              color: colors.gold,
+            { label: 'Pass. Perc', value: character.getPassivePerception(),       color: colors.accentSoft },
+            {
+              label: 'Inspiration',
+              value: inspiration ? '✦' : '—',
+              color: colors.gold,
               onPress: () => {
                 const newVal = inspiration ? 0 : 1;
                 setInspiration(newVal);
@@ -249,10 +289,15 @@ const doLevelUp = () => {
               key={stat.label}
               style={styles.gridCell}
               onPress={stat.onPress}
-              activeOpacity={stat.onPress ? 0.7 : 1}
+              onLongPress={stat.onLongPress}
+              delayLongPress={400}
+              activeOpacity={stat.onPress || stat.onLongPress ? 0.7 : 1}
             >
               <Text style={[styles.gridValue, { color: stat.color }]}>{stat.value}</Text>
               <Text style={styles.gridLabel}>{stat.label}</Text>
+              {stat.onLongPress && (
+                <Text style={styles.overrideHint}>hold to edit</Text>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -260,28 +305,66 @@ const doLevelUp = () => {
         {/* ATTACKS */}
         <Text style={sharedStyles.sectionHeader}>Attacks</Text>
 
-        <View style={styles.attackRow}>
-          <View style={styles.attackNameCol}>
-            <Text style={styles.attackName}>Fisticuffs</Text>
-            <Text style={styles.attackTag}>Unarmed · {character.getFisticuffsDie()}</Text>
-          </View>
-          <View style={styles.attackStatCol}>
-            <Text style={styles.attackStatLabel}>ATK</Text>
-            <Text style={styles.attackStat}>+{character.getMeleeAttackBonus()}</Text>
-          </View>
-          <View style={styles.attackStatCol}>
-            <Text style={styles.attackStatLabel}>DMG</Text>
-            <Text style={styles.attackStat}>
-              {character.getFisticuffsDie()}+{character.getAbilityMod('str')}
-            </Text>
-          </View>
-        </View>
+        {(() => {
+  const unarmed = character.getUnarmedAttack();
+  if (!unarmed) return null;
+  return (
+    <TouchableOpacity
+      style={styles.attackRow}
+        onLongPress={() => {
+         breakdownRef.current = {
+        type:        'attack',
+        ...unarmed,
+    attackTotal: unarmed.attackBonus,  // ← map it explicitly
+  };
+  setBreakdownModalVisible(true);
+}}
+
+      delayLongPress={400}
+      activeOpacity={0.7}
+    >
+      <View style={styles.attackNameCol}>
+        <Text style={styles.attackName}>{unarmed.name}</Text>
+        <Text style={styles.attackTag}>{unarmed.tag} · hold for breakdown</Text>
+      </View>
+      <View style={styles.attackStatCol}>
+        <Text style={styles.attackStatLabel}>ATK</Text>
+        <Text style={styles.attackStat}>+{unarmed.attackBonus}</Text>
+      </View>
+      <View style={styles.attackStatCol}>
+        <Text style={styles.attackStatLabel}>DMG</Text>
+        <Text style={styles.attackStat}>
+          {unarmed.damageDie}+{unarmed.damageBonus}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+})()}
 
         {equippedAttacks.map((atk, i) => (
-          <View key={i} style={[styles.attackRow, styles.attackRowWeapon]}>
+          <TouchableOpacity
+            key={i}
+            style={[styles.attackRow, styles.attackRowWeapon]}
+            onLongPress={() => {
+              breakdownRef.current = {
+                type:        'attack',
+                name:        atk.name,
+                strMod:      atk.strMod,
+                profBonus:   character.proficiencyBonus,
+                isProficient: atk.isProficient,
+                magicBonus:  atk.magicBonus,
+                attackTotal: atk.attackBonus,
+                damageDie:   atk.damageDie,
+                damageBonus: atk.damageBonus,
+              };
+              setBreakdownModalVisible(true);
+            }}
+            delayLongPress={400}
+            activeOpacity={0.7}
+          >
             <View style={styles.attackNameCol}>
               <Text style={styles.attackName}>{atk.name}</Text>
-              <Text style={styles.attackTag}>Weapon</Text>
+              <Text style={styles.attackTag}>Weapon · hold for breakdown</Text>
             </View>
             <View style={styles.attackStatCol}>
               <Text style={styles.attackStatLabel}>ATK</Text>
@@ -290,10 +373,10 @@ const doLevelUp = () => {
             <View style={styles.attackStatCol}>
               <Text style={styles.attackStatLabel}>DMG</Text>
               <Text style={styles.attackStat}>
-                {atk.damage}{atk.damageBonus >= 0 ? '+' : ''}{atk.damageBonus}
+                {atk.damageDie}{atk.damageBonus >= 0 ? '+' : ''}{atk.damageBonus}
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         ))}
 
         {equippedAttacks.length === 0 && (
@@ -332,21 +415,21 @@ const doLevelUp = () => {
 
       </ScrollView>
 
-     {/* FLOATING BUTTONS */}
-<View style={styles.fabRow}>
-  <TouchableOpacity
-    style={[styles.fab, { backgroundColor: colors.gold }]}
-    onPress={() => setLevelUpModalVisible(true)}
-  >
-    <Ionicons name="arrow-up-circle" size={22} color={colors.background} />
-  </TouchableOpacity>
-  <TouchableOpacity
-    style={[styles.fab, { backgroundColor: colors.surfaceDeep }]}
-    onPress={() => setRestModalVisible(true)}
-  >
-    <Ionicons name="moon" size={22} color={colors.textPrimary} />
-  </TouchableOpacity>
-  </View>
+      {/* FLOATING BUTTONS */}
+      <View style={styles.fabRow}>
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: colors.gold }]}
+          onPress={() => setLevelUpModalVisible(true)}
+        >
+          <Ionicons name="arrow-up-circle" size={18} color={colors.background} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: colors.surfaceDeep }]}
+          onPress={() => setRestModalVisible(true)}
+        >
+          <Ionicons name="moon" size={18} color={colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
 
       {/* HP MODAL */}
       <Modal visible={hpModalVisible} transparent animationType="slide">
@@ -451,7 +534,7 @@ const doLevelUp = () => {
               <View style={styles.rollResult}>
                 <Text style={styles.rollDice}>[{lastRollResult.rolls.join(' + ')}]</Text>
                 <Text style={styles.rollMeta}>
-                  +{lastRollResult.conMod >= 0 ? lastRollResult.conMod : lastRollResult.conMod} CON × {lastRollResult.rolls.length}
+                  {conMod >= 0 ? `+${conMod}` : conMod} CON × {lastRollResult.rolls.length}
                 </Text>
                 <Text style={styles.rollTotal}>
                   +{lastRollResult.total} HP → {lastRollResult.newHp} / {character.hpMax}
@@ -480,7 +563,7 @@ const doLevelUp = () => {
         </View>
       </Modal>
 
-      {/* EQUIPPED ITEM DESCRIPTION MODAL */}
+      {/* EQUIPPED ITEM MODAL */}
       <Modal visible={equippedModalVisible} transparent animationType="fade">
         <View style={sharedStyles.modalOverlay}>
           <View style={sharedStyles.modalBox}>
@@ -515,79 +598,224 @@ const doLevelUp = () => {
           </View>
         </View>
       </Modal>
-{/* LEVEL UP MODAL */}
-<Modal visible={levelUpModalVisible} transparent animationType="slide">
-  <View style={sharedStyles.modalOverlay}>
-    <View style={sharedStyles.modalBox}>
-      <Text style={sharedStyles.modalTitle}>Level Up</Text>
-      {(() => {
-        const calc = calcLevelUp();
-        if (!calc) return (
-          <Text style={styles.modalSub}>Already at maximum level!</Text>
-        );
-        const { newLevel, hpIncrease, newProfBonus, levelData } = calc;
-        return (
-          <>
-            <View style={styles.levelUpPreview}>
-              <View style={styles.levelUpRow}>
-                <Text style={styles.levelUpLabel}>Level</Text>
-                <Text style={styles.levelUpValue}>
-                  {characterLevel} → <Text style={{ color: colors.gold }}>{newLevel}</Text>
-                </Text>
-              </View>
-              <View style={styles.levelUpRow}>
-                <Text style={styles.levelUpLabel}>Hit Points</Text>
-                <Text style={styles.levelUpValue}>
-                  +<Text style={{ color: colors.success }}>{hpIncrease}</Text>
-                  <Text style={styles.levelUpMeta}>
-                    {' '}(avg d{hitDieFaces} {conMod >= 0 ? `+${conMod}` : conMod} CON)
-                  </Text>
-                </Text>
-              </View>
-              <View style={styles.levelUpRow}>
-                <Text style={styles.levelUpLabel}>Proficiency</Text>
-                <Text style={styles.levelUpValue}>
-                  +<Text style={{ color: colors.accentSoft }}>{newProfBonus}</Text>
-                </Text>
-              </View>
-              <View style={styles.levelUpRow}>
-                <Text style={styles.levelUpLabel}>Fisticuffs</Text>
-                <Text style={styles.levelUpValue}>
-                  <Text style={{ color: colors.accent }}>{levelData.fisticuffs}</Text>
-                </Text>
-              </View>
-              <View style={styles.levelUpRow}>
-                <Text style={styles.levelUpLabel}>Moxie Points</Text>
-                <Text style={styles.levelUpValue}>
-                  <Text style={{ color: colors.gold }}>{levelData.moxiePoints}</Text>
-                </Text>
-              </View>
-              {levelData.features?.length > 0 && (
-                <View style={styles.levelUpRow}>
-                  <Text style={styles.levelUpLabel}>New Features</Text>
-                  <Text style={[styles.levelUpValue, { flex: 1, flexWrap: 'wrap' }]}>
-                    {levelData.features.join(', ')}
-                  </Text>
+
+      {/* LEVEL UP MODAL */}
+      <Modal visible={levelUpModalVisible} transparent animationType="slide">
+        <View style={sharedStyles.modalOverlay}>
+          <View style={sharedStyles.modalBox}>
+            <Text style={sharedStyles.modalTitle}>Level Up</Text>
+            {(() => {
+              const calc = calcLevelUp();
+              if (!calc) return (
+                <Text style={styles.modalSub}>Already at maximum level!</Text>
+              );
+              const { newLevel, hpIncrease, newProfBonus, levelData } = calc;
+              return (
+                <>
+                  <View style={styles.levelUpPreview}>
+                    <View style={styles.levelUpRow}>
+                      <Text style={styles.levelUpLabel}>Level</Text>
+                      <Text style={styles.levelUpValue}>
+                        {characterLevel} → <Text style={{ color: colors.gold }}>{newLevel}</Text>
+                      </Text>
+                    </View>
+                    <View style={styles.levelUpRow}>
+                      <Text style={styles.levelUpLabel}>Hit Points</Text>
+                      <Text style={styles.levelUpValue}>
+                        +<Text style={{ color: colors.success }}>{hpIncrease}</Text>
+                        <Text style={styles.levelUpMeta}>
+                          {' '}(avg d{hitDieFaces} {conMod >= 0 ? `+${conMod}` : conMod} CON)
+                        </Text>
+                      </Text>
+                    </View>
+                    <View style={styles.levelUpRow}>
+                      <Text style={styles.levelUpLabel}>Proficiency</Text>
+                      <Text style={styles.levelUpValue}>
+                        +<Text style={{ color: colors.accentSoft }}>{newProfBonus}</Text>
+                      </Text>
+                    </View>
+                    <View style={styles.levelUpRow}>
+                      <Text style={styles.levelUpLabel}>Fisticuffs</Text>
+                      <Text style={styles.levelUpValue}>
+                        <Text style={{ color: colors.accent }}>{levelData.fisticuffs}</Text>
+                      </Text>
+                    </View>
+                    <View style={styles.levelUpRow}>
+                      <Text style={styles.levelUpLabel}>Moxie Points</Text>
+                      <Text style={styles.levelUpValue}>
+                        <Text style={{ color: colors.gold }}>{levelData.moxiePoints}</Text>
+                      </Text>
+                    </View>
+                    {levelData.features?.length > 0 && (
+                      <View style={styles.levelUpRow}>
+                        <Text style={styles.levelUpLabel}>New Features</Text>
+                        <Text style={[styles.levelUpValue, { flex: 1, flexWrap: 'wrap' }]}>
+                          {levelData.features.join(', ')}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={[sharedStyles.primaryButton, { backgroundColor: colors.gold }]}
+                    onPress={doLevelUp}
+                  >
+                    <Text style={[sharedStyles.primaryButtonText, { color: colors.background }]}>
+                      Confirm Level Up to {newLevel}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
+            <TouchableOpacity onPress={() => setLevelUpModalVisible(false)}>
+              <Text style={sharedStyles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* BREAKDOWN MODAL — AC and weapon attacks */}
+      <Modal visible={breakdownModalVisible} transparent animationType="fade">
+        <View style={sharedStyles.modalOverlay}>
+          <View style={sharedStyles.modalBox}>
+            {breakdownRef.current?.type === 'attack' ? (
+              <>
+                <Text style={sharedStyles.modalTitle}>{breakdownRef.current.name}</Text>
+                <Text style={styles.breakdownSub}>Attack &amp; Damage Breakdown</Text>
+                <View style={styles.breakdownTable}>
+                  <BreakdownRow label="STR Modifier" value={`+${breakdownRef.current.strMod}`} />
+                  <BreakdownRow
+                    label="Proficiency"
+                    value={breakdownRef.current.isProficient
+                      ? `+${breakdownRef.current.profBonus}`
+                      : '— (not proficient)'}
+                  />
+                  {breakdownRef.current.magicBonus > 0 && (
+                    <BreakdownRow label="Magic Bonus" value={`+${breakdownRef.current.magicBonus}`} />
+                  )}
+                  <BreakdownRow label="To Hit Total" value={`+${breakdownRef.current.attackTotal}`} isTotal />
+                  <View style={styles.breakdownDivider} />
+                  <BreakdownRow label="Damage Die"   value={breakdownRef.current.damageDie} />
+                  <BreakdownRow label="STR Modifier" value={`+${breakdownRef.current.strMod}`} />
+                  {breakdownRef.current.magicBonus > 0 && (
+                    <BreakdownRow label="Magic Bonus" value={`+${breakdownRef.current.magicBonus}`} />
+                  )}
+                  <BreakdownRow label="Damage Bonus" value={`+${breakdownRef.current.damageBonus}`} isTotal />
                 </View>
-              )}
-            </View>
+              </>
+            ) : (
+              <>
+                <Text style={sharedStyles.modalTitle}>Armour Class</Text>
+                <Text style={styles.breakdownSub}>{breakdownRef.current?.formula}</Text>
+                <View style={styles.breakdownTable}>
+                  <BreakdownRow label="Base" value={String(breakdownRef.current?.base ?? 0)} />
+                  {(breakdownRef.current?.dexApplied ?? 0) !== 0 && (
+                    <BreakdownRow label="DEX Modifier" value={`+${breakdownRef.current.dexApplied}`} />
+                  )}
+                  {(breakdownRef.current?.shieldBonus ?? 0) > 0 && (
+                    <BreakdownRow label="Shield" value="+2" />
+                  )}
+                  {(breakdownRef.current?.magicBonus ?? 0) > 0 && (
+                    <BreakdownRow label="Magic Bonus" value={`+${breakdownRef.current.magicBonus}`} />
+                  )}
+                  <BreakdownRow label="Total AC" value={String(breakdownRef.current?.total ?? 0)} isTotal />
+                  {breakdownRef.current?.isOverride && (
+                    <Text style={styles.overrideNote}>⚠ Manual override active</Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={[sharedStyles.primaryButton, { marginTop: spacing.md }]}
+                  onPress={() => {
+                    overrideKeyRef.current = 'ac';
+                    setOverrideInput(
+                      breakdownRef.current?.isOverride
+                        ? String(breakdownRef.current.total)
+                        : ''
+                    );
+                    setBreakdownModalVisible(false);
+                    setTimeout(() => setOverrideModalVisible(true), 300);
+                  }}
+                >
+                  <Text style={sharedStyles.primaryButtonText}>
+                    {breakdownRef.current?.isOverride ? 'Edit Override' : 'Set Override'}
+                  </Text>
+                </TouchableOpacity>
+                {breakdownRef.current?.isOverride && (
+                  <TouchableOpacity
+                    style={[sharedStyles.primaryButton, { backgroundColor: colors.surfaceDeep, marginTop: spacing.sm }]}
+                    onPress={() => {
+                      const newOverrides = { ...character.overrides };
+                      delete newOverrides.ac;
+                      character.overrides = newOverrides;
+                      persist({ overrides: newOverrides });
+                      setBreakdownModalVisible(false);
+                    }}
+                  >
+                    <Text style={[sharedStyles.primaryButtonText, { color: colors.textMuted }]}>
+                      Clear Override
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
             <TouchableOpacity
-              style={[sharedStyles.primaryButton, { backgroundColor: colors.gold }]}
-              onPress={doLevelUp}
+              style={[sharedStyles.primaryButton, { marginTop: spacing.md }]}
+              onPress={() => setBreakdownModalVisible(false)}
             >
-              <Text style={[sharedStyles.primaryButtonText, { color: colors.background }]}>
-                Confirm Level Up to {newLevel}
+              <Text style={sharedStyles.primaryButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* OVERRIDE INPUT MODAL */}
+      <Modal visible={overrideModalVisible} transparent animationType="slide">
+        <View style={sharedStyles.modalOverlay}>
+          <View style={sharedStyles.modalBox}>
+            <Text style={sharedStyles.modalTitle}>
+              Override {overrideKeyRef.current?.toUpperCase()}
+            </Text>
+            <Text style={styles.breakdownSub}>Enter a value to manually set this stat</Text>
+            <TextInput
+              style={[sharedStyles.input, styles.largeInput]}
+              keyboardType="numeric"
+              value={overrideInput}
+              onChangeText={setOverrideInput}
+              autoFocus
+            />
+            <TouchableOpacity
+              style={sharedStyles.primaryButton}
+              onPress={() => {
+                const val = parseInt(overrideInput, 10);
+                if (isNaN(val)) return;
+                character.overrides = { ...character.overrides, [overrideKeyRef.current]: val };
+                persist({ overrides: character.overrides });
+                setOverrideModalVisible(false);
+                setOverrideInput('');
+              }}
+            >
+              <Text style={sharedStyles.primaryButtonText}>Apply Override</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[sharedStyles.primaryButton, { backgroundColor: colors.surfaceDeep, marginTop: spacing.sm }]}
+              onPress={() => {
+                const newOverrides = { ...character.overrides };
+                delete newOverrides[overrideKeyRef.current];
+                character.overrides = newOverrides;
+                persist({ overrides: newOverrides });
+                setOverrideModalVisible(false);
+                setOverrideInput('');
+              }}
+            >
+              <Text style={[sharedStyles.primaryButtonText, { color: colors.textMuted }]}>
+                Reset to Calculated
               </Text>
             </TouchableOpacity>
-          </>
-        );
-      })()}
-      <TouchableOpacity onPress={() => setLevelUpModalVisible(false)}>
-        <Text style={sharedStyles.cancelText}>Cancel</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-</Modal>
+            <TouchableOpacity onPress={() => { setOverrideModalVisible(false); setOverrideInput(''); }}>
+              <Text style={sharedStyles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
     </View>
   );
@@ -803,54 +1031,115 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Rest FAB
- fabRow: {
-  position: 'absolute',
-  right: spacing.lg,
-  bottom: spacing.lg,
-  flexDirection: 'column',
-  gap: spacing.sm,
-},
-fab: {
-  width: 50,
-  height: 50,
-  borderRadius: radius.full,
-  alignItems: 'center',
-  justifyContent: 'center',
-  ...shadows.card,
-},
+  // FABs
+  fabRow: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.md,
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  fab: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
 
-// Level up modal
-levelUpPreview: {
-  backgroundColor: colors.surfaceDeep,
-  borderRadius: radius.sm,
-  padding: spacing.md,
-  marginBottom: spacing.md,
-  width: '100%',
-},
-levelUpRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'flex-start',
-  paddingVertical: spacing.xs,
-  borderBottomWidth: 1,
-  borderBottomColor: colors.surface,
-},
-levelUpLabel: {
-  color: colors.textMuted,
-  fontSize: 13,
-},
-levelUpValue: {
-  color: colors.textPrimary,
-  fontSize: 13,
-  fontWeight: 'bold',
-  textAlign: 'right',
-},
-levelUpMeta: {
-  color: colors.textMuted,
-  fontSize: 11,
-  fontWeight: 'normal',
-},
+  // Breakdown modal
+  breakdownSub: {
+    color: colors.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  breakdownTable: {
+    width: '100%',
+    backgroundColor: colors.surfaceDeep,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surface,
+  },
+  breakdownRowTotal: {
+    borderBottomWidth: 0,
+    marginTop: spacing.xs,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.surfaceAlt,
+  },
+  breakdownLabel: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  breakdownLabelTotal: {
+    color: colors.textPrimary,
+    fontWeight: 'bold',
+  },
+  breakdownValue: {
+    color: colors.accentSoft,
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  breakdownValueTotal: {
+    color: colors.textPrimary,
+    fontSize: 15,
+  },
+  breakdownDivider: {
+    height: 1,
+    backgroundColor: colors.surfaceAlt,
+    marginVertical: spacing.sm,
+  },
+  overrideHint: {
+    color: colors.textDisabled,
+    fontSize: 9,
+    marginTop: 2,
+  },
+  overrideNote: {
+    color: colors.warning,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+
+  // Level up modal
+  levelUpPreview: {
+    backgroundColor: colors.surfaceDeep,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    width: '100%',
+  },
+  levelUpRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surface,
+  },
+  levelUpLabel: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  levelUpValue: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: 'bold',
+    textAlign: 'right',
+  },
+  levelUpMeta: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: 'normal',
+  },
 
   // HP modal
   largeInput: {
