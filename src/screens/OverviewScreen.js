@@ -51,12 +51,23 @@ export default function OverviewScreen({ route, onRegisterActions }) {
   const [lastRollResult, setLastRollResult]     = useState(null);
   const [equippedModalVisible, setEquippedModalVisible] = useState(false);
   const [levelUpModalVisible, setLevelUpModalVisible]   = useState(false);
-  const [characterLevel, setCharacterLevel]             = useState(character.level);
+  const [characterLevel, setCharacterLevel]             = useState(characterLevel);
   const [breakdownModalVisible, setBreakdownModalVisible] = useState(false);
   const [overrideModalVisible, setOverrideModalVisible]   = useState(false);
   const [overrideInput, setOverrideInput]                 = useState('');
   const [weaponStoreReady, setWeaponStoreReady]           = useState(false);
+  const [secondWindUsed, setSecondWindUsed] = useState(character.secondWindUsed ?? 0);
+  const [actionSurgeUsed, setActionSurgeUsed] = useState(character.actionSurgeUsed ?? 0);
 
+  const isFighter = character.classId === 'fighter';
+  const fighterLevelData = isFighter ? classData?.levels?.[characterLevel] : null;
+  const actionSurgeMax = isFighter
+    ? character.level >= 17
+      ? 2
+      : character.level >= 2
+      ? 1
+      : 0
+    : 0;
   const breakdownRef        = useRef(null);
   const overrideKeyRef      = useRef(null);
   const selectedEquippedRef = useRef(null);
@@ -226,105 +237,141 @@ const doLevelUp = () => {
   return (
     <View style={{ flex: 1 }}>
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
-
-        {/* HP BAR */}
-        <TouchableOpacity
-          style={styles.hpBarContainer}
-          onPress={() => { setHpInput(''); setHpModalVisible(true); }}
-          activeOpacity={0.8}
-        >
-          <View style={styles.hpBarHeader}>
-            <Text style={styles.hpBarLabel}>HIT POINTS</Text>
-            <Text style={styles.hpBarValue}>
-              {hpCurrent} <Text style={styles.hpBarMax}>/ {character.hpMax}</Text>
-            </Text>
-          </View>
-          <View style={styles.hpBarTrack}>
-            <View style={[styles.hpBarFill, { width: `${hpPercent * 100}%`, backgroundColor: hpBarColor }]} />
-          </View>
-          {hpTemp > 0 && (
-            <Text style={styles.hpTempBadge}>+{hpTemp} temporary</Text>
-          )}
-        </TouchableOpacity>
-
-        {/* TOP CARDS ROW */}
-        <View style={styles.cardRow}>
-  <TouchableOpacity
-    style={styles.card}
-    onPress={() => setHitDiceModalVisible(true)}
+        
+        {/* TOP ROW: HP + HIT DICE */}
+        <View style={styles.topRow}>
+          
+          {/* HP: 2/3 width */}
+          <TouchableOpacity
+            style={styles.hpBarContainer}
+    onPress={() => {
+      setHpInput('');
+      setHpModalVisible(true);
+    }}
     activeOpacity={0.8}
   >
-    <Text style={styles.cardLabel}>HIT DICE</Text>
-    <Text style={styles.cardValue}>{hitDiceRemaining}</Text>
-    <Text style={styles.cardSub}>of {character.level} d{hitDieFaces}</Text>
+    <View style={styles.hpBarHeader}>
+      <Text style={styles.hpBarLabel}>HIT POINTS</Text>
+      <Text style={styles.hpBarValue}>
+        {hpCurrent} <Text style={styles.hpBarMax}>/ {character.hpMax}</Text>
+      </Text>
+    </View>
+    <View style={styles.hpBarTrack}>
+      <View
+        style={[
+          styles.hpBarFill,
+          { width: `${hpPercent * 100}%`, backgroundColor: hpBarColor },
+        ]}
+      />
+    </View>
+    {hpTemp > 0 && (
+      <Text style={styles.hpTempBadge}>+{hpTemp} temporary</Text>
+    )}
   </TouchableOpacity>
 
-  {moxieMax > 0 && (
+  {/* Right column: Hit Dice only */}
+  <View style={styles.topRightCol}>
     <TouchableOpacity
-      style={[styles.card, styles.cardGold]}
-      onPress={() => {
-        const newVal = Math.max(0, moxie - 1);
-        setMoxie(newVal);
-        persist({ moxieCurrent: newVal });
-      }}
-      onLongPress={() => {
-        const newVal = Math.min(moxieMax, moxie + 1);
-        setMoxie(newVal);
-        persist({ moxieCurrent: newVal });
-      }}
+      style={styles.hitDiceCard}
+      onPress={() => setHitDiceModalVisible(true)}
       activeOpacity={0.8}
     >
-      <Text style={styles.cardLabel}>MOXIE</Text>
-      <Text style={[styles.cardValue, { color: colors.gold }]}>{moxie}</Text>
-      <Text style={styles.cardSub}>/ {moxieMax}</Text>
+      <Text style={styles.cardLabel}>HIT DICE</Text>
+      <Text style={styles.cardValue}>{hitDiceRemaining}</Text>
+      <Text style={styles.cardSub}>
+        of {character.level} d{hitDieFaces}
+      </Text>
     </TouchableOpacity>
-  )}
+  </View>
 </View>
 
-        {/* STATS GRID */}
-        <Text style={sharedStyles.sectionHeader}>Combat Stats</Text>
-        <View style={styles.grid}>
-          {[
-            {
-              label: 'AC',
-              value: character.getArmorClass(),
-              color: colors.accentSoft,
-              onLongPress: () => {
-                breakdownRef.current = character.getACBreakdown();
-                setBreakdownModalVisible(true);
-              }
+ {/* STATS GRID */}
+<Text style={sharedStyles.sectionHeader}>Combat Stats</Text>
+<View style={styles.grid}>
+  {[
+    {
+      label: 'AC',
+      value: character.getArmorClass(),
+      color: colors.accentSoft,
+      onLongPress: () => {
+        breakdownRef.current = character.getACBreakdown();
+        setBreakdownModalVisible(true);
+      },
+    },
+    {
+      label: 'Initiative',
+      value: `+${character.getInitiativeBonus()}`,
+      color: colors.accentSoft,
+    },
+    {
+      label: 'Prof.',
+      value: `+${character.proficiencyBonus}`,
+      color: colors.accentSoft,
+    },
+    {
+      label: 'Speed',
+      value: `${character.speed}ft`,
+      color: colors.accentSoft,
+    },
+    {
+      label: 'Pass. Perc',
+      value: character.getPassivePerception(),
+      color: colors.accentSoft,
+    },
+    {
+      label: 'Inspiration',
+      value: inspiration ? '✦' : '—',
+      color: colors.gold,
+      onPress: () => {
+        const newVal = inspiration ? 0 : 1;
+        setInspiration(newVal);
+        persist({ inspiration: newVal });
+      },
+    },
+    // Fighter-only: always show Second Wind; Action Surge only if level >= 2
+    ...(isFighter
+      ? [
+          {
+            label: 'Second Wind',
+            value: secondWindUsed ? 'Used' : 'Ready',
+            color: secondWindUsed ? colors.textMuted : colors.accentSoft,
+            onPress: () => {
+              const used = secondWindUsed ? 0 : 1;
+              setSecondWindUsed(used);
+              persist({ secondWindUsed: used });
             },
-            { label: 'Initiative',  value: `+${character.getInitiativeBonus()}`, color: colors.accentSoft },
-            { label: 'Prof.',       value: `+${character.proficiencyBonus}`,      color: colors.accentSoft },
-            { label: 'Speed',       value: `${character.speed}ft`,                color: colors.accentSoft },
-            { label: 'Pass. Perc', value: character.getPassivePerception(),       color: colors.accentSoft },
-            {
-              label: 'Inspiration',
-              value: inspiration ? '✦' : '—',
-              color: colors.gold,
-              onPress: () => {
-                const newVal = inspiration ? 0 : 1;
-                setInspiration(newVal);
-                persist({ inspiration: newVal });
-              }
-            },
-          ].map((stat) => (
-            <TouchableOpacity
-              key={stat.label}
-              style={styles.gridCell}
-              onPress={stat.onPress}
-              onLongPress={stat.onLongPress}
-              delayLongPress={400}
-              activeOpacity={stat.onPress || stat.onLongPress ? 0.7 : 1}
-            >
-              <Text style={[styles.gridValue, { color: stat.color }]}>{stat.value}</Text>
-              <Text style={styles.gridLabel}>{stat.label}</Text>
-              {stat.onLongPress && (
-                <Text style={styles.overrideHint}>hold to edit</Text>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
+          },
+          ...(character.level >= 2
+            ? [
+                {
+                  label: 'Action Surge',
+                  value: `${actionSurgeUsed}/${actionSurgeMax}`,
+                  color: colors.accentSoft,
+                  onPress: () => {
+                    const next = (actionSurgeUsed + 1) % (actionSurgeMax + 1);
+                    setActionSurgeUsed(next);
+                    persist({ actionSurgeUsed: next });
+                  },
+                },
+              ]
+            : []),
+        ]
+      : []),
+  ].map((stat) => (
+    <TouchableOpacity
+      key={stat.label}
+      style={styles.gridCell}
+      onPress={stat.onPress}
+      onLongPress={stat.onLongPress}
+      delayLongPress={400}
+      activeOpacity={stat.onPress || stat.onLongPress ? 0.7 : 1}
+    >
+      <Text style={[styles.gridValue, { color: stat.color }]}>{stat.value}</Text>
+      <Text style={styles.gridLabel}>{stat.label}</Text>
+    </TouchableOpacity>
+  ))}
+</View>
+
 
         {/* ATTACKS */}
         <Text style={sharedStyles.sectionHeader}>Attacks</Text>
@@ -833,10 +880,31 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
 
-  // HP bar
+topRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+    alignItems: 'stretch', // Ensures both columns stretch to the height of the tallest item
+  },
+
+  topRightCol: {
+    flex: 1,
+    // Removed justifyContent: 'flex-start' so the card can stretch to full height
+  },
+
   hpBarContainer: {
     ...sharedStyles.card,
-    marginBottom: spacing.md,
+    flex: 2,
+    justifyContent: 'center', // Centers the HP content vertically
+    // Removed marginBottom: spacing.md 
+  },
+
+  hitDiceCard: {
+    ...sharedStyles.card,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center', // Centers the text vertically to match the HP bar
+    // Notice: No borderTopWidth or borderTopColor here!
   },
   hpBarHeader: {
     flexDirection: 'row',
@@ -911,15 +979,17 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginBottom: spacing.md,
   },
-  gridCell: {
-    width: '30%',
-    flexGrow: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
-    alignItems: 'center',
-    ...shadows.card,
-  },
+ gridCell: {
+  width: '30%',
+  flexGrow: 1,
+  backgroundColor: colors.surface,
+  borderRadius: radius.sm,
+  padding: spacing.sm,
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: 60, // tweak to taste
+  ...shadows.card,
+},
   gridValue: {
     fontSize: 16,
     fontWeight: 'bold',
