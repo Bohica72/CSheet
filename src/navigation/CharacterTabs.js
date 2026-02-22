@@ -76,7 +76,7 @@ export default function CharacterTabs({ route }) {
             <Ionicons
               name={tab.icon}
               size={18}
-              color={activeTab === tab.key ? colors.accent : colors.textMuted}
+              color={activeTab === tab.key ? colors.accent2 : colors.textMuted}
             />
             <Text style={[
               styles.tabLabel,
@@ -180,6 +180,9 @@ const styles = StyleSheet.create({
   tabActive: {
     borderBottomColor: colors.accent,
   },
+  tabActive2: {
+    borderBottomColor: colors.accent,
+  },
   tabLabel: {
     fontSize: 10,
     color: colors.textMuted,
@@ -187,7 +190,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   tabLabelActive: {
-    color: colors.accent,
+    color: colors.accent2,
     fontWeight: 'bold',
   },
   screenContainer: {

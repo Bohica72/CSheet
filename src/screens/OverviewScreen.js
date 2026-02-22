@@ -8,6 +8,9 @@ import { saveCharacter } from '../utils/CharacterStore';
 import { getItemByName } from '../utils/ItemStore';
 import { initWeaponStore } from '../utils/WeaponStore';
 import { Character } from '../models/Character';
+import { getClassData, getSubclassLevelFeatures } from '../utils/ClassStore';
+
+
 import {
   colors, spacing, radius, typography,
   shadows, sharedStyles
@@ -33,6 +36,7 @@ function BreakdownRow({ label, value, isTotal }) {
 export default function OverviewScreen({ route, onRegisterActions }) {
   const raw       = route.params.character;
   const character = raw instanceof Character ? raw : new Character(raw);
+  const classData = character.getClassData?.();
 
   const [hpCurrent, setHpCurrent]               = useState(character.hpCurrent);
   const [hpTemp, setHpTemp]                     = useState(character.hpTemp ?? 0);
@@ -157,15 +161,15 @@ export default function OverviewScreen({ route, onRegisterActions }) {
   };
 
 const calcLevelUp = () => {
-  const newLevel  = characterLevel + 1;
+  const newLevel = characterLevel + 1;
   if (newLevel > 20) return null;
 
-  const classData    = character.getClassData?.();
-  const levelData    = classData?.levels?.[newLevel];
+
+  const levelData = classData?.levels?.[newLevel];
   const newProfBonus = character._calcProfBonus(newLevel);
-  const hitDieAvg    = Math.floor(hitDieFaces / 2) + 1;
-  const hpIncrease   = Math.max(1, hitDieAvg + conMod);
-  const newHpMax     = character.hpMax + hpIncrease;
+  const hitDieAvg = Math.floor(hitDieFaces / 2) + 1;
+  const hpIncrease = Math.max(1, hitDieAvg + conMod);
+  const newHpMax = character.hpMax + hpIncrease;
 
   return {
     newLevel,
@@ -173,32 +177,35 @@ const calcLevelUp = () => {
     hpIncrease,
     newProfBonus,
     levelData: levelData ?? {
-      fisticuffs:  '—',
+      fisticuffs: '—',
       moxiePoints: 0,
-      features:    [],
+      features: [],
     },
   };
 };
 
+const doLevelUp = () => {
+  const calc = calcLevelUp();
+  if (!calc) return;
 
-  const doLevelUp = () => {
-    const calc = calcLevelUp();
-    if (!calc) return;
-    const { newLevel, newHpMax, hpIncrease, newProfBonus } = calc;
-    const newHpCurrent     = hpCurrent + hpIncrease;
-    const newDiceRemaining = hitDiceRemaining + 1;
-    setCharacterLevel(newLevel);
-    setHpCurrent(newHpCurrent);
-    setHitDiceRemaining(newDiceRemaining);
-    persist({
-      level:            newLevel,
-      hpMax:            newHpMax,
-      hpCurrent:        newHpCurrent,
-      hitDiceRemaining: newDiceRemaining,
-      proficiencyBonus: newProfBonus,
-    });
-    setLevelUpModalVisible(false);
-  };
+  const { newLevel, newHpMax, hpIncrease, newProfBonus } = calc;
+  const newHpCurrent = hpCurrent + hpIncrease;
+  const newDiceRemaining = hitDiceRemaining + 1;
+
+  setCharacterLevel(newLevel);
+  setHpCurrent(newHpCurrent);
+  setHitDiceRemaining(newDiceRemaining);
+
+  persist({
+    level: newLevel,
+    hpMax: newHpMax,
+    hpCurrent: newHpCurrent,
+    hitDiceRemaining: newDiceRemaining,
+    proficiencyBonus: newProfBonus,
+  });
+
+  setLevelUpModalVisible(false);
+};
 
   const getItemBonusSummary = (item) => {
     if (!item) return null;
@@ -634,26 +641,24 @@ const calcLevelUp = () => {
                         +<Text style={{ color: colors.accentSoft }}>{newProfBonus}</Text>
                       </Text>
                     </View>
-                    <View style={styles.levelUpRow}>
-                      <Text style={styles.levelUpLabel}>Fisticuffs</Text>
-                      <Text style={styles.levelUpValue}>
-                        <Text style={{ color: colors.accent }}>{levelData.fisticuffs}</Text>
-                      </Text>
-                    </View>
-                    <View style={styles.levelUpRow}>
-                      <Text style={styles.levelUpLabel}>Moxie Points</Text>
-                      <Text style={styles.levelUpValue}>
-                        <Text style={{ color: colors.gold }}>{levelData.moxiePoints}</Text>
-                      </Text>
-                    </View>
-                    {levelData.features?.length > 0 && (
-                      <View style={styles.levelUpRow}>
-                        <Text style={styles.levelUpLabel}>New Features</Text>
-                        <Text style={[styles.levelUpValue, { flex: 1, flexWrap: 'wrap' }]}>
-                          {levelData.features.join(', ')}
-                        </Text>
-                      </View>
-                    )}
+                    {/* Replace hardcoded Fisticuffs / Moxie rows with: */}
+{levelData.fisticuffs != null && (
+  <View style={styles.levelUpRow}>
+    <Text style={styles.levelUpLabel}>Fisticuffs</Text>
+    <Text style={styles.levelUpValue}>
+      <Text style={{ color: colors.accent }}>{levelData.fisticuffs}</Text>
+    </Text>
+  </View>
+)}
+{levelData.resourceMax != null && (
+  <View style={styles.levelUpRow}>
+    <Text style={styles.levelUpLabel}>{classData?.resource?.name ?? 'Resource'}</Text>
+    <Text style={styles.levelUpValue}>
+      <Text style={{ color: colors.gold }}>{levelData.resourceMax}</Text>
+    </Text>
+  </View>
+)}
+
                   </View>
                   <TouchableOpacity
                     style={[sharedStyles.primaryButton, { backgroundColor: colors.gold }]}

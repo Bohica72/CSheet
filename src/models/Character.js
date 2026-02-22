@@ -1,7 +1,8 @@
 import { getEquippedBonuses } from '../utils/BonusEngine';
 import { getItemByName } from '../utils/ItemStore';
 import { getWeaponDamage } from '../utils/WeaponStore';
-import { getClassById } from '../utils/ClassStore';
+import { getClassData } from '../utils/ClassStore';
+
 
 export class Character {
   constructor(data) {
@@ -77,30 +78,31 @@ export class Character {
 
   // ─── Class data ───────────────────────────────────────────────────────────────
 
-  getClassData() {
-    return getClassById(this.classId);
-  }
+getClassData() {
+  return getClassData(this.classId);
+}
 
-  getUnarmedAttack() {
-    const classData = getClassById(this.classId);
-    if (!classData) return null;
+getUnarmedAttack() {
+  const classData = getClassData(this.classId);
+  if (!classData) return null;
 
-    const damageDie = classData.levels?.[this.level]?.fisticuffs
-      ?? classData.unarmedDie
-      ?? '1d4';
+  const damageDie = classData.levels?.[this.level]?.fisticuffs
+    ?? classData.unarmedDie
+    ?? '1d4';
 
-    return {
-      name:         classData.unarmedAttackName ?? 'Unarmed Strike',
-      tag:          classData.unarmedAttackTag  ?? 'Unarmed',
-      damageDie,
-      damageBonus:  this.getAbilityMod('str'),
-      attackBonus:  this.getMeleeAttackBonus(),
-      isProficient: true,
-      magicBonus:   0,
-      strMod:       this.getAbilityMod('str'),
-      profBonus:    this.proficiencyBonus,
-    };
-  }
+  return {
+    name:         classData.unarmedAttackName ?? 'Unarmed Strike',
+    tag:          classData.unarmedAttackTag  ?? 'Unarmed',
+    damageDie,
+    damageBonus:  this.getAbilityMod('str'),
+    attackBonus:  this.getMeleeAttackBonus(),
+    isProficient: true,
+    magicBonus:   0,
+    strMod:       this.getAbilityMod('str'),
+    profBonus:    this.proficiencyBonus,
+  };
+}
+
 
   // ─── Ability scores ───────────────────────────────────────────────────────────
 
@@ -274,7 +276,7 @@ export class Character {
   // ─── Moxie ────────────────────────────────────────────────────────────────────
 
   getMoxieMax() {
-    const classData = getClassById(this.classId);
+    const classData = getClassData(this.classId);
     return classData?.levels?.[this.level]?.moxiePoints ?? 0;
   }
 
@@ -285,13 +287,13 @@ export class Character {
   // ─── Hit dice ─────────────────────────────────────────────────────────────────
 
   getHitDice() {
-    const classData = getClassById(this.classId);
+    const classData = getClassData(this.classId);
     const faces     = classData?.hitDie ?? 8;
     return `${this.level}d${faces}`;
   }
 
   getFisticuffsDie() {
-    const classData = getClassById(this.classId);
+    const classData = getClassData(this.classId);
     return classData?.levels?.[this.level]?.fisticuffs ?? '1d4';
   }
 

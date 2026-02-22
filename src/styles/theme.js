@@ -8,6 +8,7 @@ export const colors = {
 
   // Accent
   accent:       '#2e383c',
+  accent2:      '#7fbbb3',
   accentDim:    '#7a1020',
   accentSoft:   '#d3c6aa',
 
