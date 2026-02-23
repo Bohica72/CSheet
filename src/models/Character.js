@@ -1,7 +1,9 @@
 import { getEquippedBonuses } from '../utils/BonusEngine';
 import { getItemByName } from '../utils/ItemStore';
-import { getWeaponDamage } from '../utils/WeaponStore';
+import { getWeaponDamageByName } from '../utils/WeaponStore';
 import { getClassData } from '../utils/ClassStore';
+
+
 
 
 export class Character {
@@ -15,6 +17,9 @@ export class Character {
     this.raceSource  = data.raceSource ?? null;
     this.background  = data.background ?? null;
     this.classSource = data.classSource ?? null;
+    this.ragesUsed = data.ragesUsed ?? 0;  
+    this.knownCantrips = data.knownCantrips ?? [];
+    this.isRaging  = data.isRaging ?? false;
 
     // Accept abilities as either a nested object OR flat fields
     // Wizard saves nested, legacy data may save flat — handle both
@@ -30,6 +35,10 @@ export class Character {
         cha: data.cha ?? 10,
       };
     }
+
+    this.spellSlotsUsed = data.spellSlotsUsed ?? {}; // { "1": used1st, "2": used2nd, ... }
+    this.preparedSpells = data.preparedSpells ?? []; // array of spell ids/names
+
 
     // Proficiency bonus — calculate from level if not stored
     this.proficiencyBonus = data.proficiencyBonus ?? this._calcProfBonus(data.level ?? 1);
@@ -304,31 +313,56 @@ getUnarmedAttack() {
   }
 
   getEquippedWeaponAttacks() {
-    return this.inventory
-      .filter(entry => {
-        if (!entry.equipped) return false;
-        const item = getItemByName(entry.itemName);
-        return item?.ObjectType === 'Weapon';
-      })
-      .map(entry => {
-        const item         = getItemByName(entry.itemName);
-        const magicBonus   = item?.BonusWeapon ?? 0;
-        const isProficient = entry.proficient ?? true;
-        const strMod       = this.getAbilityMod('str');
-        const baseDamage   = getWeaponDamage(item?.BaseItem ?? item?.Name ?? '') ?? '1d6';
-        const damageDie    = baseDamage.split(' ')[0];
-        return {
-          name:         item.Name,
-          attackBonus:  strMod + (isProficient ? this.proficiencyBonus : 0) + magicBonus,
-          damageDie,
-          damageBonus:  strMod + magicBonus,
-          magicBonus,
-          isProficient,
-          strMod,
-          isWeapon:     true,
-        };
-      });
-  }
+  return (this.inventory ?? [])
+    .filter(entry => {
+      if (!entry.equipped) return false;
+      const item = getItemByName(entry.itemName);
+      return item?.ObjectType === 'Weapon';
+   console.log('getEquippedWeaponAttacks result:', attacks);
+  return attacks;
+    })
+  
+    .map(entry => {
+      const item       = getItemByName(entry.itemName) ?? {};
+      const magicBonus = item.BonusWeapon ?? 0;
+      const isProficient = entry.proficient ?? true;
+      const strMod     = this.getAbilityMod('str');
+
+      // Use BaseItem/Name/itemName as the lookup key
+      const baseName = item.BaseItem ?? item.Name ?? entry.itemName;
+      const dmgInfo  = getWeaponDamageByName(baseName);
+
+      // Fallback to 1d6 if somehow still unknown
+      const damageDie = dmgInfo?.dice ?? '1d6';
+      const damageType = dmgInfo?.type ?? '';
+
+      // Barbarian rage bonus to damage, if raging
+      const isBarbarian = this.classId?.toLowerCase() === 'barbarian';
+      const classData   = this.getClassData?.();
+      const rageBonus   = isBarbarian && this.isRaging
+        ? (classData?.rageDamage?.[this.level] ?? 0)
+        : 0;
+
+      const abilityDamageBonus = strMod + magicBonus + rageBonus;
+
+
+      return {
+        name:        item.Name ?? entry.itemName,
+        attackBonus: strMod + (isProficient ? this.proficiencyBonus : 0) + magicBonus,
+        damageDie,                         // e.g. "1d8"
+        damageBonus: abilityDamageBonus,   // STR + magic + rage if active
+        damageType,                        // e.g. "Slashing"
+        magicBonus,
+        isProficient,
+        strMod,
+        isWeapon: true,
+
+
+      };
+    });
+
+}
+
 
   // ─── Serialisation ────────────────────────────────────────────────────────────
 
@@ -361,6 +395,9 @@ getUnarmedAttack() {
       attunedItems:        this.attunedItems,
       attacks:             this.attacks,
       overrides:           this.overrides,
+      knownCantrips:       this.knownCantrips,
+      ragesUsed: this.ragesUsed,
+      isRaging: this.isRaging,
     };
   }
 }

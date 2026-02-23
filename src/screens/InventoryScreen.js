@@ -9,6 +9,7 @@ import { getEquippedBonuses, MAX_ATTUNEMENT } from '../utils/BonusEngine';
 import ItemCard from '../components/ItemCard';
 import { saveCharacter } from '../utils/CharacterStore';
 import { colors, spacing, radius, typography, shadows, sharedStyles } from '../styles/theme';
+import { getWeaponDamageByName } from '../utils/WeaponStore';
 
 function rarityColor(rarity) {
   if (!rarity) return colors.rarity.common;
@@ -98,6 +99,9 @@ export default function InventoryScreen({ route }) {
   const renderInventoryItem = ({ item: entry }) => {
   const itemData = getItemByName(entry.itemName);
   const rColor   = rarityColor(itemData?.Rarity);
+  const dmgInfo = getWeaponDamageByName(entry.itemName);
+  const damageText = dmgInfo ? `${dmgInfo.dice} ${dmgInfo.type}` : null;
+
   return (
     <TouchableOpacity
       style={[styles.inventoryRow, { borderLeftColor: rColor }]}
@@ -118,6 +122,15 @@ export default function InventoryScreen({ route }) {
           <Text style={styles.itemType}>{itemData.ObjectType}</Text>
         )}
       </View>
+
+{itemData?.ObjectType && (
+          <Text style={styles.itemType}>{itemData.ObjectType}</Text>
+        )}
+        {damageText && (
+          <Text style={styles.itemName}>
+            Damage: {damageText}
+          </Text>
+        )}
 
       <View style={styles.inventoryControls}>
         {/* Quantity */}

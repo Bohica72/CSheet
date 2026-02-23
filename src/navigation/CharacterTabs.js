@@ -4,35 +4,55 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radius, sharedStyles } from '../styles/theme';
 import { Character } from '../models/Character';
 
-import OverviewScreen   from '../screens/OverviewScreen';
-import SkillsScreen     from '../screens/SkillsScreen';
-import InventoryScreen  from '../screens/InventoryScreen';
-import ReferenceScreen  from '../screens/ReferenceScreen';
+import OverviewScreen  from '../screens/OverviewScreen';
+import SkillsScreen    from '../screens/SkillsScreen';
+import InventoryScreen from '../screens/InventoryScreen';
+import ReferenceScreen from '../screens/ReferenceScreen';
 
-const TABS = [
-  { key: 'Overview',   icon: 'stats-chart',  label: 'Overview'  },
-  { key: 'Skills',     icon: 'body',         label: 'Skills'    },
-  { key: 'Inventory',  icon: 'bag-handle',   label: 'Inventory' },
-  { key: 'Reference',  icon: 'book',         label: 'Reference' },
-];
-
-const SCREENS = {
-  Overview:  OverviewScreen,
-  Skills:    SkillsScreen,
-  Inventory: InventoryScreen,
-  Reference: ReferenceScreen,
-};
+import { getClassData } from '../utils/ClassStore';
+import MagicScreen from '../screens/MagicScreen';
 
 export default function CharacterTabs({ route }) {
   const raw = route.params.character;
   const character = raw instanceof Character ? raw : new Character(raw);
 
+  // 1. Derive class data
+  const classData = getClassData(character.classId);
+
+  // 2. ALL useState hooks — must come before any conditionals or early returns
   const [activeTab, setActiveTab]           = useState('Overview');
   const [menuVisible, setMenuVisible]       = useState(false);
   const [restCallback, setRestCallback]     = useState(null);
   const [levelUpCallback, setLevelUpCallback] = useState(null);
 
+  // 3. Build SCREENS and TABS after hooks
+  const SCREENS = {
+    Overview:  OverviewScreen,
+    Skills:    SkillsScreen,
+    Inventory: InventoryScreen,
+    Reference: ReferenceScreen,
+    ...(classData?.spellcaster ? { Magic: MagicScreen } : {}),
+  };
+
+  const TABS = [
+    { key: 'Overview',  label: 'Overview',  icon: 'person-outline'    },
+    { key: 'Skills',    label: 'Skills',    icon: 'list-outline'      },
+    { key: 'Inventory', label: 'Inventory', icon: 'bag-outline'       },
+    { key: 'Reference', label: 'Reference', icon: 'book-outline'      },
+    ...(classData?.spellcaster ? [{ key: 'Magic', label: 'Magic', icon: 'sparkles-outline' }] : []),
+  ];
+
+  // 4. Derive ActiveScreen — safe now because SCREENS and activeTab both exist
   const ActiveScreen = SCREENS[activeTab];
+
+  // 5. Optional: guard against undefined (can remove once confirmed working)
+  if (!ActiveScreen) {
+    return (
+      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Unknown tab: {activeTab}</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -42,20 +62,16 @@ export default function CharacterTabs({ route }) {
         <View>
           <Text style={styles.characterName}>{character.name}</Text>
           <Text style={styles.characterSub}>
-  {`Level ${character.level} ${character.classId
-    ? character.classId.charAt(0).toUpperCase() + character.classId.slice(1)
-    : 'Adventurer'}`}
-  {character.subclassId
-    ? ` · ${character.subclassId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}`
-    : ''}
-  {character.race
-    ? ` · ${character.race}`
-    : ''}
-</Text>
-
+            {`Level ${character.level} ${character.classId
+              ? character.classId.charAt(0).toUpperCase() + character.classId.slice(1)
+              : 'Adventurer'}`}
+            {character.subclassId
+              ? ` · ${character.subclassId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}`
+              : ''}
+            {character.race ? ` · ${character.race}` : ''}
+          </Text>
         </View>
 
-        {/* Menu button */}
         <TouchableOpacity
           onPress={() => setMenuVisible(true)}
           style={styles.menuButton}
@@ -78,10 +94,7 @@ export default function CharacterTabs({ route }) {
               size={18}
               color={activeTab === tab.key ? colors.accent2 : colors.textMuted}
             />
-            <Text style={[
-              styles.tabLabel,
-              activeTab === tab.key && styles.tabLabelActive
-            ]}>
+            <Text style={[styles.tabLabel, activeTab === tab.key && styles.tabLabelActive]}>
               {tab.label}
             </Text>
           </TouchableOpacity>
@@ -135,8 +148,8 @@ export default function CharacterTabs({ route }) {
       </Modal>
 
     </SafeAreaView>
-  );
-}
+  );  // ← end of return
+}   // ← end of function
 
 const styles = StyleSheet.create({
   container: {
@@ -180,9 +193,6 @@ const styles = StyleSheet.create({
   tabActive: {
     borderBottomColor: colors.accent,
   },
-  tabActive2: {
-    borderBottomColor: colors.accent,
-  },
   tabLabel: {
     fontSize: 10,
     color: colors.textMuted,
@@ -197,8 +207,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-
-  // Menu
   menuBox: {
     position: 'absolute',
     top: 60,

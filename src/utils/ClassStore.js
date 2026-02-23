@@ -5,6 +5,7 @@ import pugilistData from '../data/pugilist.json';
 const WIZARD = {
   id: 'wizard',
   name: 'Wizard',
+  spellcaster: true,
   source: 'XPHB',
   hitDie: 6,
   saves: ['int', 'wis'],
@@ -45,6 +46,50 @@ const WIZARD = {
     { shortName: 'Graviturgy',  source: 'EGW',   features: [{ level: 2, name: 'Adjust Density' },                                                { level: 6, name: 'Gravity Well' },         { level: 10, name: 'Violent Attraction' },  { level: 14, name: 'Event Horizon' }] },
   ],
 };
+
+const BARBARIAN = {
+  id: 'barbarian',
+  name: 'Barbarian',
+  source: 'XPHB',
+  hitDie: 12,
+  saves: ['str', 'con'],
+  spellcaster: false,
+
+  rageDamage: {
+    1: 2, 2: 2, 3: 2, 4: 2, 5: 2, 6: 2, 7: 2, 8: 2,
+    9: 3, 10: 3, 11: 3, 12: 3, 13: 3, 14: 3, 15: 3, 16: 3,
+    17: 4, 18: 4, 19: 4, 20: 4,
+  },
+  ragesPerRest: {
+    1: 2, 2: 2, 3: 3, 4: 3, 5: 3, 6: 4, 7: 4, 8: 4,
+    9: 4, 10: 4, 11: 4, 12: 5, 13: 5, 14: 5, 15: 5, 16: 5,
+    17: 6, 18: 6, 19: 6, 20: 999, // unlimited at 20
+  },
+
+  levels: [
+    { level: 1,  features: ['Rage', 'Unarmored Defense', 'Weapon Mastery'] },
+    { level: 2,  features: ['Danger Sense', 'Reckless Attack'] },
+    { level: 3,  features: ['Barbarian Subclass', 'Primal Knowledge'] },
+    { level: 4,  features: ['Ability Score Improvement'] },
+    { level: 5,  features: ['Extra Attack', 'Fast Movement'] },
+    { level: 6,  features: ['Subclass Feature'] },
+    { level: 7,  features: ['Feral Instinct', 'Instinctive Pounce'] },
+    { level: 8,  features: ['Ability Score Improvement'] },
+    { level: 9,  features: ['Brutal Strike'] },
+    { level: 10, features: ['Subclass Feature'] },
+    { level: 11, features: ['Relentless Rage'] },
+    { level: 12, features: ['Ability Score Improvement'] },
+    { level: 13, features: ['Improved Brutal Strike'] },
+    { level: 14, features: ['Subclass Feature'] },
+    { level: 15, features: ['Persistent Rage'] },
+    { level: 16, features: ['Ability Score Improvement'] },
+    { level: 17, features: ['Improved Brutal Strike II'] },
+    { level: 18, features: ['Indomitable Might'] },
+    { level: 19, features: ['Epic Boon'] },
+    { level: 20, features: ['Primal Champion'] },
+  ],
+};
+
 
 
 const FIGHTER = {
@@ -88,13 +133,26 @@ const FIGHTER = {
   ],
 };
 
+const BARBARIAN_GIANT = {
+  id: 'path_of_the_giant',
+  name: 'Path of the Giant',
+  source: 'BGG',
+  levels: [
+    { level: 3,  features: ["Giant's Power", "Giant's Havoc"] },
+    { level: 6,  features: ['Elemental Cleaver'] },
+    { level: 10, features: ['Mighty Impel'] },
+    { level: 14, features: ['Demiurgic Colossus'] },
+  ],
+};
+
+
 // ─── Registry ────────────────────────────────────────────────────────────────
 
 
 const CLASS_DATA = {
-  pugilist: pugilistData,   // existing — untouched
-  wizard:   WIZARD,
-  fighter:  FIGHTER, 
+  wizard: WIZARD,
+  fighter: FIGHTER,
+  barbarian: BARBARIAN,
 };
 
 export function getClassData(classId) {

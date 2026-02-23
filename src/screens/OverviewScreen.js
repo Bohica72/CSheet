@@ -8,13 +8,17 @@ import { saveCharacter } from '../utils/CharacterStore';
 import { getItemByName } from '../utils/ItemStore';
 import { initWeaponStore } from '../utils/WeaponStore';
 import { Character } from '../models/Character';
-import { getClassData, getSubclassLevelFeatures } from '../utils/ClassStore';
+import { getClassData } from '../utils/ClassStore';
+// ...
+
 
 
 import {
   colors, spacing, radius, typography,
   shadows, sharedStyles
 } from '../styles/theme';
+
+
 
 function rollDie(faces) {
   return Math.floor(Math.random() * faces) + 1;
@@ -36,7 +40,7 @@ function BreakdownRow({ label, value, isTotal }) {
 export default function OverviewScreen({ route, onRegisterActions }) {
   const raw       = route.params.character;
   const character = raw instanceof Character ? raw : new Character(raw);
-  const classData = character.getClassData?.();
+  const classData = getClassData(character.classId);
 
   const [hpCurrent, setHpCurrent]               = useState(character.hpCurrent);
   const [hpTemp, setHpTemp]                     = useState(character.hpTemp ?? 0);
@@ -58,6 +62,8 @@ export default function OverviewScreen({ route, onRegisterActions }) {
   const [weaponStoreReady, setWeaponStoreReady]           = useState(false);
   const [secondWindUsed, setSecondWindUsed] = useState(character.secondWindUsed ?? 0);
   const [actionSurgeUsed, setActionSurgeUsed] = useState(character.actionSurgeUsed ?? 0);
+console.log('Overview equippedAttacks:', equippedAttacks);
+
 
   const isFighter = character.classId === 'fighter';
   const fighterLevelData = isFighter ? classData?.levels?.[characterLevel] : null;
@@ -71,6 +77,40 @@ export default function OverviewScreen({ route, onRegisterActions }) {
   const breakdownRef        = useRef(null);
   const overrideKeyRef      = useRef(null);
   const selectedEquippedRef = useRef(null);
+
+  const isBarbarian = character.classId === 'barbarian';
+  // Barbarian rage values
+const rageMax = isBarbarian
+  ? (classData?.ragesPerRest?.[character.level] ?? 0)
+  : 0;
+
+const rageDamageBonus = isBarbarian
+  ? (classData?.rageDamage?.[character.level] ?? 2)
+  : 0;
+
+const [ragesUsed, setRagesUsed] = useState(character.ragesUsed ?? 0);
+const [isRaging, setIsRaging]   = useState(character.isRaging ?? false);
+
+const toggleRage = () => {
+  if (!isBarbarian || rageMax === 0) return;
+
+  // If already raging, end rage without changing ragesUsed
+  if (isRaging) {
+    setIsRaging(false);
+    persist({ isRaging: false });
+    return;
+  }
+
+
+  // Start a new rage if we have uses left
+  if (ragesUsed >= rageMax && rageMax !== 999) return;
+
+  const newUsed = rageMax === 999 ? 0 : ragesUsed + 1;
+  setRagesUsed(newUsed);
+  setIsRaging(true);
+  persist({ ragesUsed: newUsed, isRaging: true });
+};
+
 
   useEffect(() => {
     initWeaponStore().then(() => setWeaponStoreReady(true));
@@ -154,6 +194,12 @@ export default function OverviewScreen({ route, onRegisterActions }) {
   };
 
   const doShortRest = () => {
+      if (isBarbarian && rageMax !== 0 && rageMax !== 999) {
+    const newRagesUsed = Math.max(0, ragesUsed - 1);
+    setRagesUsed(newRagesUsed);
+    persist({ ragesUsed: newRagesUsed });
+  }
+
     setRestModalVisible(false);
     setTimeout(() => setHitDiceModalVisible(true), 300);
   };
@@ -166,7 +212,7 @@ export default function OverviewScreen({ route, onRegisterActions }) {
     setHpTemp(0);
     setMoxie(newMoxie);
     setHitDiceRemaining(newDice);
-    persist({ hpCurrent: newHp, hpTemp: 0, moxieCurrent: newMoxie, hitDiceRemaining: newDice });
+    persist({ hpCurrent: newHp, hpTemp: 0, ragesUsed: 0, moxieCurrent: newMoxie, spellSlotsUsed: {}, hitDiceRemaining: newDice });
     setRestModalVisible(false);
     Alert.alert('Long Rest', 'HP, Moxie, and Hit Dice fully restored.');
   };
@@ -357,6 +403,38 @@ const doLevelUp = () => {
             : []),
         ]
       : []),
+      // Barbarian-only: Rage
+...(isBarbarian
+  ? [
+      {
+        label: 'Rage',
+        value:
+          rageMax === 999
+            ? (isRaging ? 'Raging (∞)' : '∞ uses')
+            : `${Math.max(0, rageMax - ragesUsed)}/${rageMax}`,
+        color: isRaging ? colors.accent : colors.accentSoft,
+        onPress: () => {
+          if (rageMax === 0) return;
+
+          // If already raging, just turn it off
+          if (isRaging) {
+            setIsRaging(false);
+            persist({ isRaging: false });
+            return;
+          }
+
+          // Start a new rage if we have uses left (ignore cap at 20 with 999)
+          if (ragesUsed >= rageMax && rageMax !== 999) return;
+
+          const newUsed = rageMax === 999 ? 0 : ragesUsed + 1;
+          setRagesUsed(newUsed);
+          setIsRaging(true);
+          persist({ ragesUsed: newUsed, isRaging: true });
+        },
+      },
+    ]
+  : []),
+
   ].map((stat) => (
     <TouchableOpacity
       key={stat.label}
@@ -432,6 +510,8 @@ const doLevelUp = () => {
             delayLongPress={400}
             activeOpacity={0.7}
           >
+
+
             <View style={styles.attackNameCol}>
               <Text style={styles.attackName}>{atk.name}</Text>
               <Text style={styles.attackTag}>Weapon · hold for breakdown</Text>
