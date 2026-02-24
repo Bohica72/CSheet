@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
-  StyleSheet, Alert
+  StyleSheet, Alert, ScrollView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { searchItems, getItemByName } from '../utils/ItemStore';
@@ -37,6 +37,19 @@ export default function InventoryScreen({ route }) {
     setSearchQuery(text);
     setSearchResults(searchItems(text));
   };
+
+const handleRemoveItem = (itemName) => {
+  Alert.alert('Remove Item', `Remove ${itemName} from inventory?`, [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Remove',
+      style: 'destructive',
+      onPress: () => {
+        updateInventory(inventory.filter(e => e.itemName !== itemName));
+      },
+    },
+  ]);
+};
 
   const handleAddItem = (item) => {
     const existing = inventory.find(e => e.itemName === item.Name);
@@ -97,95 +110,98 @@ export default function InventoryScreen({ route }) {
   };
 
   const renderInventoryItem = ({ item: entry }) => {
-  const itemData = getItemByName(entry.itemName);
-  const rColor   = rarityColor(itemData?.Rarity);
-  const dmgInfo = getWeaponDamageByName(entry.itemName);
-  const damageText = dmgInfo ? `${dmgInfo.dice} ${dmgInfo.type}` : null;
+    const itemData = getItemByName(entry.itemName);
+    const rColor   = rarityColor(itemData?.Rarity);
+    const dmgInfo = getWeaponDamageByName(entry.itemName);
+    const damageText = dmgInfo ? `${dmgInfo.dice} ${dmgInfo.type}` : null;
 
-  return (
-    <TouchableOpacity
-      style={[styles.inventoryRow, { borderLeftColor: rColor }]}
-      onLongPress={() => setSelectedItem(itemData)}
-      delayLongPress={400}
-      activeOpacity={1}
-    >
-      <View style={styles.inventoryTop}>
-        <View style={styles.inventoryTitleRow}>
-          <Text style={styles.inventoryName}>{entry.itemName}</Text>
-          {itemData?.Rarity && (
-            <Text style={[styles.rarityBadge, { color: rColor }]}>
-              {itemData.Rarity}
+    return (
+      <TouchableOpacity
+        style={[styles.inventoryRow, { borderLeftColor: rColor }]}
+        onLongPress={() => setSelectedItem(itemData)}
+        delayLongPress={400}
+        activeOpacity={1}
+      >
+        <View style={styles.inventoryTop}>
+          <View style={styles.inventoryTitleRow}>
+            <Text style={styles.inventoryName}>{entry.itemName}</Text>
+            {itemData?.Rarity && (
+              <Text style={[styles.rarityBadge, { color: rColor }]}>
+                {itemData.Rarity}
+              </Text>
+            )}
+          </View>
+          {itemData?.ObjectType && (
+            <Text style={styles.itemType}>{itemData.ObjectType}</Text>
+          )}
+          {damageText && (
+            <Text style={styles.itemType}>
+              Damage: {damageText}
             </Text>
           )}
         </View>
-        {itemData?.ObjectType && (
-          <Text style={styles.itemType}>{itemData.ObjectType}</Text>
-        )}
-      </View>
 
-{itemData?.ObjectType && (
-          <Text style={styles.itemType}>{itemData.ObjectType}</Text>
-        )}
-        {damageText && (
-          <Text style={styles.itemName}>
-            Damage: {damageText}
-          </Text>
-        )}
+        <View style={styles.inventoryControls}>
+          {/* Quantity */}
+          <View style={styles.controlGroup}>
+            <Text style={styles.controlLabel}>QTY</Text>
+            <TextInput
+              style={styles.controlInput}
+              keyboardType="numeric"
+              value={String(entry.quantity)}
+              onChangeText={(v) => handleQuantityChange(entry.itemName, v)}
+            />
+          </View>
 
-      <View style={styles.inventoryControls}>
-        {/* Quantity */}
-        <View style={styles.controlGroup}>
-          <Text style={styles.controlLabel}>QTY</Text>
-          <TextInput
-            style={styles.controlInput}
-            keyboardType="numeric"
-            value={String(entry.quantity)}
-            onChangeText={(v) => handleQuantityChange(entry.itemName, v)}
-          />
+          {/* Charges */}
+          {entry.charges !== null && (
+            <View style={styles.controlGroup}>
+              <Text style={styles.controlLabel}>CHARGES</Text>
+              <View style={styles.chargeRow}>
+                <Ionicons name="flash" size={10} color={colors.gold} />
+                <TextInput
+                  style={[styles.controlInput, { color: colors.gold }]}
+                  keyboardType="numeric"
+                  value={String(entry.charges)}
+                  onChangeText={(v) => handleChargeChange(entry.itemName, v)}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* Equip */}
+          <TouchableOpacity
+            style={[styles.equipButton, entry.equipped && styles.equipButtonActive]}
+            onPress={() => handleToggleEquip(entry.itemName)}
+          >
+            <Ionicons
+              name={entry.equipped ? 'shield-checkmark' : 'shield-outline'}
+              size={12}
+              color={entry.equipped ? colors.textPrimary : colors.textMuted}
+            />
+            <Text style={[styles.equipButtonText, entry.equipped && styles.equipButtonTextActive]}>
+              {entry.equipped ? 'Equipped' : 'Equip'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+  style={styles.removePill}
+  onPress={() => handleRemoveItem(entry.itemName)}
+>
+  <Ionicons name="trash-outline" size={12} color={colors.textPrimary} />
+  <Text style={styles.removePillText}>Remove</Text>
+</TouchableOpacity>
+
         </View>
 
-        {/* Charges */}
-        {entry.charges !== null && (
-          <View style={styles.controlGroup}>
-            <Text style={styles.controlLabel}>CHARGES</Text>
-            <View style={styles.chargeRow}>
-              <Ionicons name="flash" size={10} color={colors.gold} />
-              <TextInput
-                style={[styles.controlInput, { color: colors.gold }]}
-                keyboardType="numeric"
-                value={String(entry.charges)}
-                onChangeText={(v) => handleChargeChange(entry.itemName, v)}
-              />
-            </View>
+        {entry.attuned && (
+          <View style={styles.attunedRow}>
+            <Ionicons name="sparkles" size={10} color={colors.gold} />
+            <Text style={styles.attunedText}>Attuned</Text>
           </View>
         )}
-
-        {/* Equip */}
-        <TouchableOpacity
-          style={[styles.equipButton, entry.equipped && styles.equipButtonActive]}
-          onPress={() => handleToggleEquip(entry.itemName)}
-        >
-          <Ionicons
-            name={entry.equipped ? 'shield-checkmark' : 'shield-outline'}
-            size={12}
-            color={entry.equipped ? colors.textPrimary : colors.textMuted}
-          />
-          <Text style={[styles.equipButtonText, entry.equipped && styles.equipButtonTextActive]}>
-            {entry.equipped ? 'Equipped' : 'Equip'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {entry.attuned && (
-        <View style={styles.attunedRow}>
-          <Ionicons name="sparkles" size={10} color={colors.gold} />
-          <Text style={styles.attunedText}>Attuned</Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-};
-
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={sharedStyles.screen}>
@@ -206,45 +222,54 @@ export default function InventoryScreen({ route }) {
         </View>
       </View>
 
-      {/* Search */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={16} color={colors.textMuted} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search items to add..."
-          placeholderTextColor={colors.textDisabled}
-          value={searchQuery}
-          onChangeText={handleSearch}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults([]); }}>
-            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Search results */}
-      {searchResults.length > 0 && (
-        <View style={styles.searchResults}>
-          {searchResults.map((item, index) => (
-            <TouchableOpacity
-              key={`${item.Name}-${index}`}
-              style={styles.searchResultRow}
-              onPress={() => { setSelectedItem(item); setSearchResults([]); }}
-            >
-              <View style={styles.searchResultLeft}>
-                <Text style={styles.searchResultName}>{item.Name}</Text>
-                <Text style={styles.searchResultType}>{item.ObjectType}</Text>
-              </View>
-              {item.Rarity && (
-                <Text style={[styles.searchResultRarity, { color: rarityColor(item.Rarity) }]}>
-                  {item.Rarity}
-                </Text>
-              )}
+      {/* Search Wrapper (Fix for zIndex/elevation issues) */}
+      <View style={{ zIndex: 100 }}>
+        
+        {/* Search */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={16} color={colors.textMuted} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search items to add..."
+            placeholderTextColor={colors.textDisabled}
+            value={searchQuery}
+            onChangeText={handleSearch}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults([]); }}>
+              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
             </TouchableOpacity>
-          ))}
+          )}
         </View>
+
+        {/* Search results */}
+        {searchResults.length > 0 && (
+  <View style={styles.searchResults}>
+    <FlatList
+      data={searchResults}
+      keyExtractor={(item, index) => `${item.Name}-${index}`}
+      renderItem={({ item }) => (
+        <TouchableOpacity
+          style={styles.searchResultRow}
+          onPress={() => { setSelectedItem(item); setSearchResults([]); }}
+        >
+          <View style={styles.searchResultLeft}>
+            <Text style={styles.searchResultName}>{item.Name}</Text>
+            <Text style={styles.searchResultType}>{item.ObjectType}</Text>
+          </View>
+          {item.Rarity && (
+            <Text style={[styles.searchResultRarity, { color: rarityColor(item.Rarity) }]}>
+              {item.Rarity}
+            </Text>
+          )}
+        </TouchableOpacity>
       )}
+      keyboardShouldPersistTaps="handled"
+    />
+  </View>
+)}
+
+      </View>
 
       {/* Inventory list */}
       <FlatList
@@ -325,13 +350,18 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   searchResults: {
-    backgroundColor: colors.surfaceAlt,
-    marginHorizontal: spacing.md,
-    borderRadius: radius.sm,
-    marginBottom: 4,
-    maxHeight: 220,
-    ...shadows.card,
-  },
+  position: 'absolute',
+  top: 90, // tune so it sits just under the search bar on your device
+  left: spacing.md,
+  right: spacing.md,
+  backgroundColor: colors.surfaceAlt,
+  borderRadius: radius.sm,
+  maxHeight: 520,
+  zIndex: 10,
+  elevation: 10, // important on Android
+  ...shadows.card,
+},
+
   searchResultRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -449,4 +479,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: spacing.xs,
   },
+  removePill: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: colors.surfaceDeep2,
+  borderRadius: radius.sm,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  marginLeft: spacing.sm,
+},
+removePillText: {
+  marginLeft: 4,
+  fontSize: 11,
+  color: colors.textPrimary,
+},
+
 });

@@ -2,6 +2,7 @@ import { getEquippedBonuses } from '../utils/BonusEngine';
 import { getItemByName } from '../utils/ItemStore';
 import { getWeaponDamageByName } from '../utils/WeaponStore';
 import { getClassData } from '../utils/ClassStore';
+import { getArmorStatsByName } from '../utils/ArmorStore';
 
 
 
@@ -10,35 +11,37 @@ export class Character {
   constructor(data) {
     this.id          = data.id;
     this.name        = data.name;
-    this.level       = data.level ?? 1;
+    
+    // --- THE ANTIDOTE ---
+    // parseInt converts "NaN" strings to actual NaN.
+    // The || operator forces any NaN, 0, undefined, or null to safely fallback to our defaults.
+    this.level       = parseInt(data.level, 10) || 1;
+    this.ragesUsed   = parseInt(data.ragesUsed, 10) || 0;
+
     this.classId     = data.classId ?? 'pugilist';
     this.subclassId  = data.subclassId ?? null;
     this.race        = data.race ?? null;
     this.raceSource  = data.raceSource ?? null;
     this.background  = data.background ?? null;
     this.classSource = data.classSource ?? null;
-    this.ragesUsed = data.ragesUsed ?? 0;  
     this.knownCantrips = data.knownCantrips ?? [];
     this.isRaging  = data.isRaging ?? false;
 
-    // Accept abilities as either a nested object OR flat fields
-    // Wizard saves nested, legacy data may save flat — handle both
     if (data.abilities) {
       this.abilities = data.abilities;
     } else {
       this.abilities = {
-        str: data.str ?? 10,
-        dex: data.dex ?? 10,
-        con: data.con ?? 10,
-        int: data.int ?? 10,
-        wis: data.wis ?? 10,
-        cha: data.cha ?? 10,
+        str: parseInt(data.str, 10) || 10,
+        dex: parseInt(data.dex, 10) || 10,
+        con: parseInt(data.con, 10) || 10,
+        int: parseInt(data.int, 10) || 10,
+        wis: parseInt(data.wis, 10) || 10,
+        cha: parseInt(data.cha, 10) || 10,
       };
     }
 
-    this.spellSlotsUsed = data.spellSlotsUsed ?? {}; // { "1": used1st, "2": used2nd, ... }
-    this.preparedSpells = data.preparedSpells ?? []; // array of spell ids/names
-
+    this.spellSlotsUsed = data.spellSlotsUsed ?? {}; 
+    this.preparedSpells = data.preparedSpells ?? [];
 
     // Proficiency bonus — calculate from level if not stored
     this.proficiencyBonus = data.proficiencyBonus ?? this._calcProfBonus(data.level ?? 1);
@@ -57,11 +60,11 @@ export class Character {
     this.skills       = data.skills ?? {};
     this.spellcastingAbility = data.spellcastingAbility ?? null;
 
-    // HP
-    this.hpMax            = data.hpMax ?? 10;
-    this.hpCurrent        = data.hpCurrent ?? this.hpMax;
-    this.hpTemp           = data.hpTemp ?? 0;
-    this.hitDiceRemaining = data.hitDiceRemaining ?? this.level;
+    // HP - Scrubbed for NaN
+    this.hpMax            = parseInt(data.hpMax, 10) || 10;
+    this.hpCurrent        = parseInt(data.hpCurrent, 10) || this.hpMax;
+    this.hpTemp           = parseInt(data.hpTemp, 10) || 0;
+    this.hitDiceRemaining = parseInt(data.hitDiceRemaining, 10) || this.level;
 
     // Combat
     this.speed       = data.speed ?? 30;
@@ -176,49 +179,10 @@ getUnarmedAttack() {
     return 10 + this.getSkillBonus('perception');
   }
 
-  getArmorClass() {
-    if (this.overrides?.ac !== undefined) {
-      return this.overrides.ac;
-    }
+  
 
-    const dexMod  = this.getAbilityMod('dex');
-    const conMod  = this.getAbilityMod('con');
-    const equipped = (this.inventory ?? []).filter(e => e.equipped);
-    let armorItem = null;
-    let hasShield = false;
-
-    for (const entry of equipped) {
-      const item = getItemByName(entry.itemName);
-      if (!item) continue;
-      const type = (item.ObjectType ?? '').toLowerCase();
-      if (type.includes('shield'))     hasShield = true;
-      else if (type.includes('armor')) armorItem = item;
-    }
-
-    let base = 0, dexApplied = 0;
-
-    if (armorItem) {
-      const type   = (armorItem.ObjectType ?? '').toLowerCase();
-      const baseAC = parseInt(armorItem.BonusAC ?? armorItem.baseAC ?? 0, 10);
-      if (type.includes('heavy')) {
-        base = baseAC; dexApplied = 0;
-      } else if (type.includes('medium')) {
-        base = baseAC; dexApplied = Math.min(dexMod, 2);
-      } else {
-        base = baseAC; dexApplied = dexMod;
-      }
-    } else if (this.bonuses?.acFormula === 'iron_chin_12_plus_con') {
-      base = 12 + conMod; dexApplied = 0;
-    } else {
-      base = 10; dexApplied = dexMod;
-    }
-
-    const shieldBonus  = hasShield ? 2 : 0;
-    const { bonusAC }  = getEquippedBonuses(this.inventory);
-    return base + dexApplied + shieldBonus + bonusAC;
-  }
-
-  getACBreakdown() {
+getACBreakdown() {
+    // 1. Manual Overrides
     if (this.overrides?.ac !== undefined) {
       return {
         formula:     'Manual Override',
@@ -232,34 +196,51 @@ getUnarmedAttack() {
     }
 
     const dexMod  = this.getAbilityMod('dex');
-    const conMod  = this.getAbilityMod('con');
+    const conMod  = this.getAbilityMod('con') || 0; // Fallback to 0 if undefined
     const equipped = (this.inventory ?? []).filter(e => e.equipped);
-    let armorItem = null;
+    
+    let armorItemName = null;
+    let armorStats = null;
     let hasShield = false;
 
+    // 2. Identify equipped armor and shields using ArmorStore
     for (const entry of equipped) {
-      const item = getItemByName(entry.itemName);
-      if (!item) continue;
-      const type = (item.ObjectType ?? '').toLowerCase();
-      if (type.includes('shield'))     hasShield = true;
-      else if (type.includes('armor')) armorItem = item;
+      const stats = getArmorStatsByName(entry.itemName);
+      if (stats) {
+        if (stats.type === 'shield') {
+          hasShield = true;
+        } else {
+          armorItemName = entry.itemName;
+          armorStats = stats;
+        }
+      }
     }
 
     let base = 0, dexApplied = 0, formula = '';
+    
+    // Force lowercase to ensure 'Barbarian' and 'barbarian' both match
+    const safeClassId = (this.classId || '').toLowerCase();
 
-    if (armorItem) {
-      const type   = (armorItem.ObjectType ?? '').toLowerCase();
-      const baseAC = parseInt(armorItem.BonusAC ?? armorItem.baseAC ?? 0, 10);
-      if (type.includes('heavy')) {
-        base = baseAC; dexApplied = 0;
-        formula = `Heavy Armor (${armorItem.Name ?? armorItem.itemName})`;
-      } else if (type.includes('medium')) {
-        base = baseAC; dexApplied = Math.min(dexMod, 2);
-        formula = `Medium Armor (${armorItem.Name ?? armorItem.itemName})`;
+    // 3. Calculate Base AC and Dex Caps
+    if (armorStats) {
+      const type = armorStats.type;
+      base = armorStats.ac;
+
+      if (type === 'heavy') {
+        dexApplied = 0;
+        formula = `Heavy Armor (${armorItemName})`;
+      } else if (type === 'medium') {
+        dexApplied = Math.min(dexMod, 2);
+        formula = `Medium Armor (${armorItemName})`;
       } else {
-        base = baseAC; dexApplied = dexMod;
-        formula = `Light Armor (${armorItem.Name ?? armorItem.itemName})`;
+        dexApplied = dexMod;
+        formula = `Light Armor (${armorItemName})`;
       }
+    } else if (safeClassId === 'barbarian') {
+      // Barbarian Unarmored Defense (No Armor, Shields OK)
+      base = 10 + conMod; 
+      dexApplied = dexMod;
+      formula = `Unarmored Defense (10 + DEX + CON ${conMod >= 0 ? '+' : ''}${conMod})`;
     } else if (this.bonuses?.acFormula === 'iron_chin_12_plus_con') {
       base = 12 + conMod; dexApplied = 0;
       formula = 'Iron Chin (12 + CON mod)';
@@ -268,6 +249,7 @@ getUnarmedAttack() {
       formula = 'Unarmored (10 + DEX mod)';
     }
 
+    // 4. Add external bonuses (Shields + Magic Bonuses)
     const shieldBonus = hasShield ? 2 : 0;
     const { bonusAC } = getEquippedBonuses(this.inventory);
 
@@ -282,6 +264,10 @@ getUnarmedAttack() {
     };
   }
 
+  getArmorClass() {
+    // DRY (Don't Repeat Yourself): Just grab the total from the breakdown!
+    return this.getACBreakdown().total;
+  }  
   // ─── Moxie ────────────────────────────────────────────────────────────────────
 
   getMoxieMax() {
@@ -312,28 +298,25 @@ getUnarmedAttack() {
     return this.getAbilityMod('str') + this.proficiencyBonus;
   }
 
-  getEquippedWeaponAttacks() {
-  return (this.inventory ?? [])
+ getEquippedWeaponAttacks() {
+  const attacks = (this.inventory ?? [])
     .filter(entry => {
       if (!entry.equipped) return false;
       const item = getItemByName(entry.itemName);
       return item?.ObjectType === 'Weapon';
-   console.log('getEquippedWeaponAttacks result:', attacks);
-  return attacks;
     })
-  
     .map(entry => {
-      const item       = getItemByName(entry.itemName) ?? {};
-      const magicBonus = item.BonusWeapon ?? 0;
+      const item         = getItemByName(entry.itemName) ?? {};
+      const magicBonus   = item.BonusWeapon ?? 0;
       const isProficient = entry.proficient ?? true;
-      const strMod     = this.getAbilityMod('str');
+      const strMod       = this.getAbilityMod('str');
 
       // Use BaseItem/Name/itemName as the lookup key
       const baseName = item.BaseItem ?? item.Name ?? entry.itemName;
       const dmgInfo  = getWeaponDamageByName(baseName);
 
       // Fallback to 1d6 if somehow still unknown
-      const damageDie = dmgInfo?.dice ?? '1d6';
+      const damageDie  = dmgInfo?.dice ?? '1d6';
       const damageType = dmgInfo?.type ?? '';
 
       // Barbarian rage bonus to damage, if raging
@@ -345,7 +328,6 @@ getUnarmedAttack() {
 
       const abilityDamageBonus = strMod + magicBonus + rageBonus;
 
-
       return {
         name:        item.Name ?? entry.itemName,
         attackBonus: strMod + (isProficient ? this.proficiencyBonus : 0) + magicBonus,
@@ -356,11 +338,11 @@ getUnarmedAttack() {
         isProficient,
         strMod,
         isWeapon: true,
-
-
       };
     });
 
+  console.log('getEquippedWeaponAttacks result:', attacks);
+  return attacks;
 }
 
 

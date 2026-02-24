@@ -6,17 +6,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { saveCharacter } from '../utils/CharacterStore';
 import { getItemByName } from '../utils/ItemStore';
-import { initWeaponStore } from '../utils/WeaponStore';
 import { Character } from '../models/Character';
+import { initWeaponStore, getWeaponDamageByName } from '../utils/WeaponStore';
 import { getClassData } from '../utils/ClassStore';
-// ...
-
-
-
 import {
   colors, spacing, radius, typography,
   shadows, sharedStyles
 } from '../styles/theme';
+
+
 
 
 
@@ -55,6 +53,7 @@ export default function OverviewScreen({ route, onRegisterActions }) {
   const [lastRollResult, setLastRollResult]     = useState(null);
   const [equippedModalVisible, setEquippedModalVisible] = useState(false);
   const [levelUpModalVisible, setLevelUpModalVisible]   = useState(false);
+  const safeLevel = parseInt(character.level, 10) || 1;
   const [characterLevel, setCharacterLevel]             = useState(characterLevel);
   const [breakdownModalVisible, setBreakdownModalVisible] = useState(false);
   const [overrideModalVisible, setOverrideModalVisible]   = useState(false);
@@ -62,7 +61,7 @@ export default function OverviewScreen({ route, onRegisterActions }) {
   const [weaponStoreReady, setWeaponStoreReady]           = useState(false);
   const [secondWindUsed, setSecondWindUsed] = useState(character.secondWindUsed ?? 0);
   const [actionSurgeUsed, setActionSurgeUsed] = useState(character.actionSurgeUsed ?? 0);
-console.log('Overview equippedAttacks:', equippedAttacks);
+
 
 
   const isFighter = character.classId === 'fighter';
@@ -80,13 +79,14 @@ console.log('Overview equippedAttacks:', equippedAttacks);
 
   const isBarbarian = character.classId === 'barbarian';
   // Barbarian rage values
-const rageMax = isBarbarian
-  ? (classData?.ragesPerRest?.[character.level] ?? 0)
-  : 0;
+// Barbarian rage values - now looking at characterLevel state
+  const rageMax = isBarbarian
+    ? (classData?.ragesPerRest?.[characterLevel] ?? 0)
+    : 0;
 
-const rageDamageBonus = isBarbarian
-  ? (classData?.rageDamage?.[character.level] ?? 2)
-  : 0;
+  const rageDamageBonus = isBarbarian
+    ? (classData?.rageDamage?.[characterLevel] ?? 2)
+    : 0;
 
 const [ragesUsed, setRagesUsed] = useState(character.ragesUsed ?? 0);
 const [isRaging, setIsRaging]   = useState(character.isRaging ?? false);
@@ -123,9 +123,24 @@ const toggleRage = () => {
     });
   }, []);
 
-  const equippedAttacks = weaponStoreReady
+
+// 1. Fetch the raw attacks from the character model
+  const rawAttacks = weaponStoreReady
     ? (character.getEquippedWeaponAttacks?.() ?? [])
     : [];
+
+  // 2. Map over them to inject the base damage from the WeaponStore
+  const equippedAttacks = rawAttacks.map(atk => {
+    // Pass the name directly, exactly as InventoryScreen does!
+    const dmgInfo = getWeaponDamageByName(atk.name);
+    
+    return {
+      ...atk,
+      // Grab the dice string (e.g., '1d8') and type (e.g., 'slashing')
+      damageDie: dmgInfo ? dmgInfo.dice : (atk.damageDie ?? '—'),
+      damageType: dmgInfo ? dmgInfo.type : '',
+    };
+  });
 
   const moxieMax    = character.getMoxieMax();
   const hitDice     = character.getHitDice();
@@ -133,6 +148,8 @@ const toggleRage = () => {
   const conMod      = character.getAbilityMod('con');
   const hpPercent   = Math.max(0, hpCurrent / character.hpMax);
   const equippedItems = (character.inventory ?? []).filter(i => i.equipped);
+
+
 
   const persist = async (updates) => {
     Object.assign(character, updates);
@@ -208,62 +225,103 @@ const toggleRage = () => {
     const newHp    = character.hpMax;
     const newMoxie = moxieMax;
     const newDice  = character.level;
+    
     setHpCurrent(newHp);
     setHpTemp(0);
     setMoxie(newMoxie);
     setHitDiceRemaining(newDice);
-    persist({ hpCurrent: newHp, hpTemp: 0, ragesUsed: 0, moxieCurrent: newMoxie, spellSlotsUsed: {}, hitDiceRemaining: newDice });
+    
+    // THE FIX: Actually update the local state so the UI refreshes instantly!
+    if (isBarbarian) {
+      setRagesUsed(0);
+      setIsRaging(false);
+    }
+
+    persist({ 
+      hpCurrent: newHp, 
+      hpTemp: 0, 
+      ragesUsed: 0, 
+      isRaging: false, // Automatically turn off rage while sleeping
+      moxieCurrent: newMoxie, 
+      spellSlotsUsed: {}, 
+      hitDiceRemaining: newDice 
+    });
+    
     setRestModalVisible(false);
-    Alert.alert('Long Rest', 'HP, Moxie, and Hit Dice fully restored.');
+    Alert.alert('Long Rest', 'HP, Moxie, Hit Dice, and Rages fully restored.');
   };
 
 const calcLevelUp = () => {
-  const newLevel = characterLevel + 1;
-  if (newLevel > 20) return null;
+    // 1. Force the current level to be a solid number, no matter what state it's in
+    const currentLvl = parseInt(characterLevel, 10) || parseInt(character.level, 10) || 1;
+    const newLevel = currentLvl + 1;
+    
+    if (newLevel > 20) return null;
 
+    const levelData = classData?.levels?.[newLevel];
+    const newProfBonus = character._calcProfBonus(newLevel);
+    
+    // 2. Force hit dice and CON modifier to be solid numbers
+    const safeHitDieFaces = parseInt(hitDieFaces, 10) || 12; // Fallback to Barbarian d12
+    const safeConMod = parseInt(conMod, 10) || 0;
+    
+    const hitDieAvg = Math.floor(safeHitDieFaces / 2) + 1;
+    const hpIncrease = Math.max(1, hitDieAvg + safeConMod);
+    
+    // 3. Force HP Max to be a solid number
+    const safeHpMax = parseInt(character.hpMax, 10) || 10;
+    const newHpMax = safeHpMax + hpIncrease;
 
-  const levelData = classData?.levels?.[newLevel];
-  const newProfBonus = character._calcProfBonus(newLevel);
-  const hitDieAvg = Math.floor(hitDieFaces / 2) + 1;
-  const hpIncrease = Math.max(1, hitDieAvg + conMod);
-  const newHpMax = character.hpMax + hpIncrease;
-
-  return {
-    newLevel,
-    newHpMax,
-    hpIncrease,
-    newProfBonus,
-    levelData: levelData ?? {
-      fisticuffs: '—',
-      moxiePoints: 0,
-      features: [],
-    },
+    return {
+      newLevel,
+      newHpMax,
+      hpIncrease,
+      newProfBonus,
+      levelData: levelData ?? {
+        fisticuffs: '—',
+        moxiePoints: 0,
+        features: [],
+      },
+    };
   };
-};
-
 const doLevelUp = () => {
-  const calc = calcLevelUp();
-  if (!calc) return;
+    const calc = calcLevelUp();
+    if (!calc) return;
 
-  const { newLevel, newHpMax, hpIncrease, newProfBonus } = calc;
-  const newHpCurrent = hpCurrent + hpIncrease;
-  const newDiceRemaining = hitDiceRemaining + 1;
+    const { newLevel, newHpMax, hpIncrease, newProfBonus } = calc;
+    
+    // 4. Force Current HP and Hit Dice to be solid numbers
+    const safeHpCurrent = parseInt(hpCurrent, 10) || parseInt(character.hpCurrent, 10) || 10;
+    const newHpCurrent = safeHpCurrent + hpIncrease;
+    
+    const safeDiceRemaining = parseInt(hitDiceRemaining, 10) || parseInt(character.hitDiceRemaining, 10) || 1;
+    const newDiceRemaining = safeDiceRemaining + 1;
 
-  setCharacterLevel(newLevel);
-  setHpCurrent(newHpCurrent);
-  setHitDiceRemaining(newDiceRemaining);
+    // 5. Update local React state
+    setCharacterLevel(newLevel);
+    setHpCurrent(newHpCurrent);
+    setHitDiceRemaining(newDiceRemaining);
 
-  persist({
-    level: newLevel,
-    hpMax: newHpMax,
-    hpCurrent: newHpCurrent,
-    hitDiceRemaining: newDiceRemaining,
-    proficiencyBonus: newProfBonus,
-  });
+    // 6. THE SILVER BULLET: Force the character instance to update immediately!
+    // This stops the UI from rendering "Level NaN" or "NaN/d12" while waiting for the database.
+    character.level = newLevel;
+    character.hpMax = newHpMax;
+    character.hpCurrent = newHpCurrent;
+    character.hitDiceRemaining = newDiceRemaining;
+    character.proficiencyBonus = newProfBonus;
 
-  setLevelUpModalVisible(false);
-};
+   // 7. Save to database
+    persist({
+      level: newLevel,
+      hpMax: newHpMax,
+      hpCurrent: newHpCurrent,
+      hitDiceRemaining: newDiceRemaining,
+      proficiencyBonus: newProfBonus,
+    });
 
+    setLevelUpModalVisible(false);
+  }; 
+  
   const getItemBonusSummary = (item) => {
     if (!item) return null;
     const parts = [];
@@ -403,37 +461,41 @@ const doLevelUp = () => {
             : []),
         ]
       : []),
-      // Barbarian-only: Rage
-...(isBarbarian
-  ? [
-      {
-        label: 'Rage',
-        value:
-          rageMax === 999
-            ? (isRaging ? 'Raging (∞)' : '∞ uses')
-            : `${Math.max(0, rageMax - ragesUsed)}/${rageMax}`,
-        color: isRaging ? colors.accent : colors.accentSoft,
-        onPress: () => {
-          if (rageMax === 0) return;
+   // Barbarian-only: Rage
+      ...(isBarbarian
+        ? [
+            {
+              // Swap label based on state
+              label: isRaging ? 'Active' : 'Rage',
+              
+              // Swap value to a bold RAGING! or the uses remaining
+              value: isRaging
+                ? 'RAGING!'
+                : (rageMax === 999 ? '∞ uses' : `${Math.max(0, rageMax - ragesUsed)}/${rageMax}`),
+                
+              color: isRaging ? colors.accent : colors.accentSoft,
+              
+              onPress: () => {
+                if (rageMax === 0) return;
 
-          // If already raging, just turn it off
-          if (isRaging) {
-            setIsRaging(false);
-            persist({ isRaging: false });
-            return;
-          }
+                // If already raging, turn it off (doesn't refund the use)
+                if (isRaging) {
+                  setIsRaging(false);
+                  persist({ isRaging: false });
+                  return;
+                }
 
-          // Start a new rage if we have uses left (ignore cap at 20 with 999)
-          if (ragesUsed >= rageMax && rageMax !== 999) return;
+                // Start a new rage if we have uses left (ignore cap at 20 with 999)
+                if (ragesUsed >= rageMax && rageMax !== 999) return;
 
-          const newUsed = rageMax === 999 ? 0 : ragesUsed + 1;
-          setRagesUsed(newUsed);
-          setIsRaging(true);
-          persist({ ragesUsed: newUsed, isRaging: true });
-        },
-      },
-    ]
-  : []),
+                const newUsed = rageMax === 999 ? 0 : ragesUsed + 1;
+                setRagesUsed(newUsed);
+                setIsRaging(true);
+                persist({ ragesUsed: newUsed, isRaging: true });
+              },
+            },
+          ]
+        : []),
 
   ].map((stat) => (
     <TouchableOpacity
@@ -452,11 +514,13 @@ const doLevelUp = () => {
 
 
         {/* ATTACKS */}
-        <Text style={sharedStyles.sectionHeader}>Attacks</Text>
-
         {(() => {
           const unarmed = character.getUnarmedAttack();
           if (!unarmed) return null;
+          
+          const appliedRageBonus = (isBarbarian && isRaging) ? rageDamageBonus : 0;
+          const finalDamageBonus = (unarmed.damageBonus || 0) + appliedRageBonus;
+
           return (
             <TouchableOpacity
               style={styles.attackRow}
@@ -465,6 +529,8 @@ const doLevelUp = () => {
                   type:        'attack',
                   ...unarmed,
                   attackTotal: unarmed.attackBonus,
+                  appliedRageBonus, // Pass to the modal
+                  finalDamageBonus, // Pass to the modal
                 };
                 setBreakdownModalVisible(true);
               }}
@@ -482,7 +548,7 @@ const doLevelUp = () => {
               <View style={styles.attackStatCol}>
                 <Text style={styles.attackStatLabel}>DMG</Text>
                 <Text style={styles.attackStat}>
-                  {unarmed.damageDie}+{unarmed.damageBonus}
+                  {unarmed.damageDie}{finalDamageBonus >= 0 ? '+' : ''}{finalDamageBonus}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -495,23 +561,23 @@ const doLevelUp = () => {
             style={[styles.attackRow, styles.attackRowWeapon]}
             onLongPress={() => {
               breakdownRef.current = {
-                type:         'attack',
-                name:         atk.name,
-                strMod:       atk.strMod,
-                profBonus:    character.proficiencyBonus,
-                isProficient: atk.isProficient,
-                magicBonus:   atk.magicBonus,
-                attackTotal:  atk.attackBonus,
-                damageDie:    atk.damageDie,
-                damageBonus:  atk.damageBonus,
+                type:             'attack',
+                name:             atk.name,
+                strMod:           atk.strMod,
+                profBonus:        character.proficiencyBonus,
+                isProficient:     atk.isProficient,
+                magicBonus:       atk.magicBonus,
+                attackTotal:      atk.attackBonus,
+                damageDie:        atk.damageDie,
+                damageBonus:      atk.damageBonus, // Base modifier (STR)
+                appliedRageBonus: atk.appliedRageBonus,
+                finalDamageBonus: atk.finalDamageBonus,
               };
               setBreakdownModalVisible(true);
             }}
             delayLongPress={400}
             activeOpacity={0.7}
           >
-
-
             <View style={styles.attackNameCol}>
               <Text style={styles.attackName}>{atk.name}</Text>
               <Text style={styles.attackTag}>Weapon · hold for breakdown</Text>
@@ -523,7 +589,7 @@ const doLevelUp = () => {
             <View style={styles.attackStatCol}>
               <Text style={styles.attackStatLabel}>DMG</Text>
               <Text style={styles.attackStat}>
-                {atk.damageDie}{atk.damageBonus >= 0 ? '+' : ''}{atk.damageBonus}
+                {atk.damageDie}{atk.finalDamageBonus >= 0 ? '+' : ''}{atk.finalDamageBonus} {atk.damageType}
               </Text>
             </View>
           </TouchableOpacity>
@@ -739,65 +805,67 @@ const doLevelUp = () => {
           <View style={sharedStyles.modalBox}>
             <Text style={sharedStyles.modalTitle}>Level Up</Text>
             {(() => {
-              const calc = calcLevelUp();
-              if (!calc) return (
-                <Text style={styles.modalSub}>Already at maximum level!</Text>
-              );
-              const { newLevel, hpIncrease, newProfBonus, levelData } = calc;
-              return (
-                <>
-                  <View style={styles.levelUpPreview}>
-                    <View style={styles.levelUpRow}>
-                      <Text style={styles.levelUpLabel}>Level</Text>
-                      <Text style={styles.levelUpValue}>
-                        {characterLevel} → <Text style={{ color: colors.gold }}>{newLevel}</Text>
-                      </Text>
-                    </View>
-                    <View style={styles.levelUpRow}>
-                      <Text style={styles.levelUpLabel}>Hit Points</Text>
-                      <Text style={styles.levelUpValue}>
-                        +<Text style={{ color: colors.success }}>{hpIncrease}</Text>
-                        <Text style={styles.levelUpMeta}>
-                          {' '}(avg d{hitDieFaces} {conMod >= 0 ? `+${conMod}` : conMod} CON)
-                        </Text>
-                      </Text>
-                    </View>
-                    <View style={styles.levelUpRow}>
-                      <Text style={styles.levelUpLabel}>Proficiency</Text>
-                      <Text style={styles.levelUpValue}>
-                        +<Text style={{ color: colors.accentSoft }}>{newProfBonus}</Text>
-                      </Text>
-                    </View>
-                    {/* Replace hardcoded Fisticuffs / Moxie rows with: */}
-{levelData.fisticuffs != null && (
-  <View style={styles.levelUpRow}>
-    <Text style={styles.levelUpLabel}>Fisticuffs</Text>
-    <Text style={styles.levelUpValue}>
-      <Text style={{ color: colors.accent }}>{levelData.fisticuffs}</Text>
-    </Text>
-  </View>
-)}
-{levelData.resourceMax != null && (
-  <View style={styles.levelUpRow}>
-    <Text style={styles.levelUpLabel}>{classData?.resource?.name ?? 'Resource'}</Text>
-    <Text style={styles.levelUpValue}>
-      <Text style={{ color: colors.gold }}>{levelData.resourceMax}</Text>
-    </Text>
-  </View>
-)}
+  const calc = calcLevelUp();
+  if (!calc) return (
+    <Text style={styles.modalSub}>Already at maximum level!</Text>
+  );
+  const { newLevel, hpIncrease, newProfBonus, levelData } = calc;
+  return (
+    <>
+      <View style={styles.levelUpPreview}>
+        <View style={styles.levelUpRow}>
+          <Text style={styles.levelUpLabel}>Level</Text>
+          <Text style={styles.levelUpValue}>
+            {characterLevel} → <Text style={{ color: colors.gold }}>{newLevel}</Text>
+          </Text>
+        </View>
+        <View style={styles.levelUpRow}>
+          <Text style={styles.levelUpLabel}>Hit Points</Text>
+          <Text style={styles.levelUpValue}>
+            +<Text style={{ color: colors.success }}>{hpIncrease}</Text>
+            <Text style={styles.levelUpMeta}>
+              {' '}(avg d{hitDieFaces} {conMod >= 0 ? `+${conMod}` : conMod} CON)
+            </Text>
+          </Text>
+        </View>
+        <View style={styles.levelUpRow}>
+          <Text style={styles.levelUpLabel}>Proficiency</Text>
+          <Text style={styles.levelUpValue}>
+            +<Text style={{ color: colors.accentSoft }}>{newProfBonus}</Text>
+          </Text>
+        </View>
 
-                  </View>
-                  <TouchableOpacity
-                    style={[sharedStyles.primaryButton, { backgroundColor: colors.gold }]}
-                    onPress={doLevelUp}
-                  >
-                    <Text style={[sharedStyles.primaryButtonText, { color: colors.background }]}>
-                      Confirm Level Up to {newLevel}
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              );
-            })()}
+        {/* New optional rows */}
+        {levelData.fisticuffs != null && (
+          <View style={styles.levelUpRow}>
+            <Text style={styles.levelUpLabel}>Fisticuffs</Text>
+            <Text style={styles.levelUpValue}>
+              <Text style={{ color: colors.accent }}>{levelData.fisticuffs}</Text>
+            </Text>
+          </View>
+        )}
+        {levelData.resourceMax != null && (
+          <View style={styles.levelUpRow}>
+            <Text style={styles.levelUpLabel}>{classData?.resource?.name ?? 'Resource'}</Text>
+            <Text style={styles.levelUpValue}>
+              <Text style={{ color: colors.gold }}>{levelData.resourceMax}</Text>
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <TouchableOpacity
+        style={[sharedStyles.primaryButton, { backgroundColor: colors.gold }]}
+        onPress={doLevelUp}
+      >
+        <Text style={[sharedStyles.primaryButtonText, { color: colors.background }]}>
+          Confirm Level Up to {newLevel}
+        </Text>
+      </TouchableOpacity>
+    </>
+  );
+})()}
+
             <TouchableOpacity onPress={() => setLevelUpModalVisible(false)}>
               <Text style={sharedStyles.cancelText}>Cancel</Text>
             </TouchableOpacity>
@@ -827,32 +895,50 @@ const doLevelUp = () => {
                   <BreakdownRow label="To Hit Total" value={`+${breakdownRef.current.attackTotal}`} isTotal />
                   <View style={styles.breakdownDivider} />
                   <BreakdownRow label="Damage Die"   value={breakdownRef.current.damageDie} />
-                  <BreakdownRow label="STR Modifier" value={`+${breakdownRef.current.strMod}`} />
+                  <BreakdownRow label="STR/DEX Modifier" value={`+${breakdownRef.current.damageBonus}`} />
+                  
                   {breakdownRef.current.magicBonus > 0 && (
                     <BreakdownRow label="Magic Bonus" value={`+${breakdownRef.current.magicBonus}`} />
                   )}
-                  <BreakdownRow label="Total Bonus" value={`+${breakdownRef.current.damageBonus}`} isTotal />
+                  
+                  {/* Show Rage Bonus if it's active! */}
+                  {breakdownRef.current.appliedRageBonus > 0 && (
+                    <BreakdownRow label="Rage Bonus" value={`+${breakdownRef.current.appliedRageBonus}`} />
+                  )}
+                  
+                  <BreakdownRow label="Total Bonus" value={`+${breakdownRef.current.finalDamageBonus}`} isTotal />
                 </View>
               </>
             ) : (
               <>
-                <Text style={sharedStyles.modalTitle}>Armour Class</Text>
+               <Text style={sharedStyles.modalTitle}>Armour Class</Text>
                 <Text style={styles.breakdownSub}>{breakdownRef.current?.formula}</Text>
                 <View style={styles.breakdownTable}>
+                  
                   <BreakdownRow label="Base" value={String(breakdownRef.current?.base ?? 0)} />
+                  
+                  {/* Safely handle positive and negative DEX modifiers */}
                   {(breakdownRef.current?.dexApplied ?? 0) !== 0 && (
-                    <BreakdownRow label="DEX Modifier" value={`+${breakdownRef.current.dexApplied}`} />
+                    <BreakdownRow 
+                      label="DEX Modifier" 
+                      value={(breakdownRef.current.dexApplied > 0 ? '+' : '') + breakdownRef.current.dexApplied} 
+                    />
                   )}
+                  
                   {(breakdownRef.current?.shieldBonus ?? 0) > 0 && (
-                    <BreakdownRow label="Shield" value="+2" />
+                    <BreakdownRow label="Shield" value={`+${breakdownRef.current.shieldBonus}`} />
                   )}
+                  
                   {(breakdownRef.current?.magicBonus ?? 0) > 0 && (
                     <BreakdownRow label="Magic Bonus" value={`+${breakdownRef.current.magicBonus}`} />
                   )}
+                  
                   <BreakdownRow label="Total AC" value={String(breakdownRef.current?.total ?? 0)} isTotal />
+                  
                   {breakdownRef.current?.isOverride && (
                     <Text style={styles.overrideNote}>⚠ Manual override active</Text>
                   )}
+                  
                 </View>
                 <TouchableOpacity
                   style={[sharedStyles.primaryButton, { marginTop: spacing.md }]}
@@ -1117,7 +1203,7 @@ topRow: {
   attackStat: {
     color: colors.accentSoft,
     fontWeight: 'bold',
-    fontSize: 15,
+    fontSize: 12,
   },
   emptyText: {
     color: colors.textMuted,

@@ -60,36 +60,36 @@ const BARBARIAN = {
     9: 3, 10: 3, 11: 3, 12: 3, 13: 3, 14: 3, 15: 3, 16: 3,
     17: 4, 18: 4, 19: 4, 20: 4,
   },
+
   ragesPerRest: {
     1: 2, 2: 2, 3: 3, 4: 3, 5: 3, 6: 4, 7: 4, 8: 4,
     9: 4, 10: 4, 11: 4, 12: 5, 13: 5, 14: 5, 15: 5, 16: 5,
     17: 6, 18: 6, 19: 6, 20: 999, // unlimited at 20
   },
 
-  levels: [
-    { level: 1,  features: ['Rage', 'Unarmored Defense', 'Weapon Mastery'] },
-    { level: 2,  features: ['Danger Sense', 'Reckless Attack'] },
-    { level: 3,  features: ['Barbarian Subclass', 'Primal Knowledge'] },
-    { level: 4,  features: ['Ability Score Improvement'] },
-    { level: 5,  features: ['Extra Attack', 'Fast Movement'] },
-    { level: 6,  features: ['Subclass Feature'] },
-    { level: 7,  features: ['Feral Instinct', 'Instinctive Pounce'] },
-    { level: 8,  features: ['Ability Score Improvement'] },
-    { level: 9,  features: ['Brutal Strike'] },
-    { level: 10, features: ['Subclass Feature'] },
-    { level: 11, features: ['Relentless Rage'] },
-    { level: 12, features: ['Ability Score Improvement'] },
-    { level: 13, features: ['Improved Brutal Strike'] },
-    { level: 14, features: ['Subclass Feature'] },
-    { level: 15, features: ['Persistent Rage'] },
-    { level: 16, features: ['Ability Score Improvement'] },
-    { level: 17, features: ['Improved Brutal Strike II'] },
-    { level: 18, features: ['Indomitable Might'] },
-    { level: 19, features: ['Epic Boon'] },
-    { level: 20, features: ['Primal Champion'] },
-  ],
+  levels: {
+    1:  { profBonus: 2, features: ['Rage', 'Unarmored Defense', 'Weapon Mastery'], resourceMax: null, fisticuffs: null },
+    2:  { profBonus: 2, features: ['Danger Sense', 'Reckless Attack'],             resourceMax: null, fisticuffs: null },
+    3:  { profBonus: 2, features: ['Barbarian Subclass', 'Primal Knowledge'],      resourceMax: null, fisticuffs: null },
+    4:  { profBonus: 2, features: ['Ability Score Improvement'],                   resourceMax: null, fisticuffs: null },
+    5:  { profBonus: 3, features: ['Extra Attack', 'Fast Movement'],               resourceMax: null, fisticuffs: null },
+    6:  { profBonus: 3, features: ['Subclass Feature'],                            resourceMax: null, fisticuffs: null },
+    7:  { profBonus: 3, features: ['Feral Instinct', 'Instinctive Pounce'],        resourceMax: null, fisticuffs: null },
+    8:  { profBonus: 3, features: ['Ability Score Improvement'],                   resourceMax: null, fisticuffs: null },
+    9:  { profBonus: 4, features: ['Brutal Strike'],                               resourceMax: null, fisticuffs: null },
+    10: { profBonus: 4, features: ['Subclass Feature'],                            resourceMax: null, fisticuffs: null },
+    11: { profBonus: 4, features: ['Relentless Rage'],                             resourceMax: null, fisticuffs: null },
+    12: { profBonus: 4, features: ['Ability Score Improvement'],                   resourceMax: null, fisticuffs: null },
+    13: { profBonus: 5, features: ['Improved Brutal Strike'],                      resourceMax: null, fisticuffs: null },
+    14: { profBonus: 5, features: ['Subclass Feature'],                            resourceMax: null, fisticuffs: null },
+    15: { profBonus: 5, features: ['Persistent Rage'],                             resourceMax: null, fisticuffs: null },
+    16: { profBonus: 5, features: ['Ability Score Improvement'],                   resourceMax: null, fisticuffs: null },
+    17: { profBonus: 6, features: ['Improved Brutal Strike II'],                   resourceMax: null, fisticuffs: null },
+    18: { profBonus: 6, features: ['Indomitable Might'],                           resourceMax: null, fisticuffs: null },
+    19: { profBonus: 6, features: ['Epic Boon'],                                   resourceMax: null, fisticuffs: null },
+    20: { profBonus: 6, features: ['Primal Champion'],                             resourceMax: null, fisticuffs: null },
+  },
 };
-
 
 
 const FIGHTER = {

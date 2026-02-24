@@ -9,8 +9,11 @@ export class LevelUp {
   }
 
   getTotalLevel() {
-    if (!this.character?.classes?.length) return 0;
-    return this.character.classes.reduce((sum, cls) => sum + (cls.level || 0), 0);
+    // Safely parse integers, fallback to root level if classes array is missing
+    if (this.character?.classes?.length) {
+      return this.character.classes.reduce((sum, cls) => sum + (parseInt(cls.level, 10) || 1), 0);
+    }
+    return parseInt(this.character?.level, 10) || 1;
   }
 
   getAdvancement() {
@@ -58,9 +61,9 @@ export class LevelUp {
   }
 
   calculateHPGain() {
-    const hitDie = this.classData?.hitDie || 10;
+    const hitDie = parseInt(this.classData?.hitDie || 10, 10);
     const avgRoll = Math.floor(hitDie / 2) + 1;
-    const conScore = this.character?.abilities?.con ?? 10;
+    const conScore = parseInt(this.character?.abilities?.con || 10, 10);
     const conMod = Math.floor((conScore - 10) / 2);
     return avgRoll + conMod;
   }
@@ -86,22 +89,14 @@ export class LevelUp {
 
       if (eff.type === 'ability_bonus' && eff.abilities) {
         for (const [ab, inc] of Object.entries(eff.abilities)) {
-          const current = updatedCharacter.abilities?.[ab];
-          if (typeof current !== 'number') continue;
-          const next = current + inc;
-          updatedCharacter.abilities[ab] = eff.max ? Math.min(next, eff.max) : next;
+          const current = parseInt(updatedCharacter.abilities?.[ab] || 10, 10);
+          const next = current + parseInt(inc, 10);
+          updatedCharacter.abilities[ab] = eff.max ? Math.min(next, parseInt(eff.max, 10)) : next;
         }
       }
 
       if (eff.type === 'ac_formula' && eff.id) {
-        // Store which formula to use; Character.getArmorClass() can interpret it
         updatedCharacter.bonuses.acFormula = eff.id;
-      }
-
-      if (eff.type === 'gain_subclass_feature_at_level') {
-        // Placeholder for later: when we import subclass features we can auto-add
-        // “subclass feature at this level” into the character’s feature list.
-        // For now, no-op.
       }
     }
   }
@@ -110,22 +105,33 @@ export class LevelUp {
     // Deep clone (fine for JSON-only data)
     const updated = JSON.parse(JSON.stringify(this.character));
 
-    if (!updated.classes || updated.classes.length === 0) {
-      throw new Error('Character has no classes defined.');
-    }
+    // Safely grab the current level as an integer
+    let currentLevel = parseInt(updated.level, 10) || 1;
 
-    // For now assume the primary class is index 0
-    const cls = updated.classes[0];
-    cls.level = (cls.level || 0) + 1;
-
-    // HP
-    const hpGain = this.calculateHPGain();
-    if (!updated.hitPoints) {
-      updated.hitPoints = { max: hpGain, current: hpGain, temp: 0 };
+    // Update the nested class level
+    if (updated.classes && updated.classes.length > 0) {
+      const cls = updated.classes[0];
+      cls.level = parseInt(cls.level || currentLevel, 10) + 1;
+      currentLevel = cls.level;
     } else {
-      updated.hitPoints.max += hpGain;
-      updated.hitPoints.current += hpGain;
+      currentLevel += 1;
     }
+
+    // 1. SYNC ROOT LEVEL (Crucial for OverviewScreen and Rage math!)
+    updated.level = currentLevel;
+
+    // HP Calculation
+    const hpGain = this.calculateHPGain();
+
+    // 2. SYNC ROOT HP PROPERTIES (Crucial for OverviewScreen hit dice & HP!)
+    updated.hpMax = parseInt(updated.hpMax || 0, 10) + hpGain;
+    updated.hpCurrent = parseInt(updated.hpCurrent || 0, 10) + hpGain;
+    updated.hitDiceRemaining = parseInt(updated.hitDiceRemaining || (currentLevel - 1), 10) + 1;
+
+    // Keep the nested hitPoints object updated just in case other components use it
+    if (!updated.hitPoints) updated.hitPoints = { max: updated.hpMax, current: updated.hpCurrent, temp: 0 };
+    updated.hitPoints.max = updated.hpMax;
+    updated.hitPoints.current = updated.hpCurrent;
 
     // Proficiency bonus
     updated.proficiencyBonus = this.getNewProficiencyBonus();
@@ -140,12 +146,8 @@ export class LevelUp {
       if (!updated.features.includes(featureId)) updated.features.push(featureId);
     }
 
-    // Apply ASI / Feat choice
+    // Apply ASI / Feat choice safely
     if (choices.asiChoice) {
-      // Expected shapes:
-      // { type: 'ability_score', abilities: ['str','con'] }  // +1/+1
-      // { type: 'ability_score', abilities: ['str'] }        // +2 (we’ll interpret as +2)
-      // { type: 'feat', feat: 'Tavern Brawler' }
       const c = choices.asiChoice;
 
       if (c.type === 'ability_score') {
@@ -154,10 +156,10 @@ export class LevelUp {
 
         if (abs.length === 1) {
           const a = abs[0];
-          if (typeof updated.abilities[a] === 'number') updated.abilities[a] += 2;
+          updated.abilities[a] = parseInt(updated.abilities[a] || 10, 10) + 2;
         } else if (abs.length === 2) {
           for (const a of abs) {
-            if (typeof updated.abilities[a] === 'number') updated.abilities[a] += 1;
+            updated.abilities[a] = parseInt(updated.abilities[a] || 10, 10) + 1;
           }
         }
       }
@@ -167,16 +169,14 @@ export class LevelUp {
       }
     }
 
-    // Apply Epic Boon / Feat choice (stored as a feat string for now)
-    if (choices.epicChoice) {
-      // { type: 'epic_boon', feat: 'Boon of Combat Prowess' } or { type: 'feat', feat: '...' }
-      const c = choices.epicChoice;
-      if (c?.feat) updated.feats.push(c.feat);
+    // Apply Epic Boon / Feat choice
+    if (choices.epicChoice?.feat) {
+      updated.feats.push(choices.epicChoice.feat);
     }
 
     // Apply subclass choice
-    if (choices.subclass) {
-      cls.subclass = choices.subclass; // store subclass id
+    if (choices.subclass && updated.classes && updated.classes.length > 0) {
+      updated.classes[0].subclass = choices.subclass; 
     }
 
     // Apply any mechanical effects tied to this level
