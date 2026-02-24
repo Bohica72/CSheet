@@ -54,7 +54,7 @@ export default function OverviewScreen({ route, onRegisterActions }) {
   const [equippedModalVisible, setEquippedModalVisible] = useState(false);
   const [levelUpModalVisible, setLevelUpModalVisible]   = useState(false);
   const safeLevel = parseInt(character.level, 10) || 1;
-  const [characterLevel, setCharacterLevel]             = useState(characterLevel);
+  const [characterLevel, setCharacterLevel] = useState(safeLevel);
   const [breakdownModalVisible, setBreakdownModalVisible] = useState(false);
   const [overrideModalVisible, setOverrideModalVisible]   = useState(false);
   const [overrideInput, setOverrideInput]                 = useState('');

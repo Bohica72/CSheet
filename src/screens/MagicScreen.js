@@ -121,15 +121,18 @@ export default function MagicScreen({ route }) {
     setDetailSpell(spell);
   };
 
-  const toggleSlot = (spellLevel) => {
-    const key = String(spellLevel);
-    const used = spellSlotsUsed[key] ?? 0;
-    const max = levelSlots[spellLevel - 1] ?? 0;
-    const next = used >= max ? 0 : used + 1;
-    const updated = { ...spellSlotsUsed, [key]: next };
-    setSpellSlotsUsed(updated);
-    persist({ spellSlotsUsed: updated });
-  };
+ const toggleSlot = (spellLevel) => {
+  const key = String(spellLevel);
+  const used = spellSlotsUsed[key] ?? 0;
+  const max = levelSlots[spellLevel - 1] ?? 0;
+  // Count remaining down instead of used up
+  const remaining = max - used;
+  const next = remaining <= 0 ? 0 : used + 1;
+  const updated = { ...spellSlotsUsed, [key]: next };
+  setSpellSlotsUsed(updated);
+  persist({ spellSlotsUsed: updated });
+};
+
 
   const togglePrepared = (spellId) => {
     const isPrepared = preparedSpells.includes(spellId);
@@ -220,15 +223,24 @@ export default function MagicScreen({ route }) {
                 if (!max) return null;
                 const used = spellSlotsUsed[String(spellLevel)] ?? 0;
                 return (
-                  <TouchableOpacity
+                 <TouchableOpacity
                     key={spellLevel}
-                    style={styles.slotCell}
+                    style={[
+                      styles.slotCell,
+                      (max - used) === 0 && styles.slotCellEmpty  // dim when exhausted
+                    ]}
                     onPress={() => toggleSlot(spellLevel)}
                     activeOpacity={0.8}
                   >
                     <Text style={styles.slotLevel}>Lv {spellLevel}</Text>
-                    <Text style={styles.slotCount}>{used} / {max}</Text>
+                    <Text style={[
+                      styles.slotCount,
+                      (max - used) === 0 && { color: colors.textMuted }
+                    ]}>
+                      {max - used} / {max}
+                    </Text>
                   </TouchableOpacity>
+
                 );
               })}
             </View>
@@ -402,26 +414,32 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   slotGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginBottom: spacing.md,
-  },
-  slotCell: {
-    width: '30%',
-    backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
-    alignItems: 'center',
-    ...sharedStyles.card,
-  },
-  slotLevel: {
-    ...typography.label,
-    marginBottom: 2,
-  },
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: spacing.xs,
+  marginBottom: spacing.md,
+},
+slotCell: {
+  width: '22%',           // 4 per row instead of 3
+  backgroundColor: colors.surface,
+  borderRadius: radius.sm,
+  paddingVertical: spacing.xs,
+  paddingHorizontal: 4,
+  alignItems: 'center',
+  ...sharedStyles.card,
+},
+ slotLevel: {
+  ...typography.label,
+  fontSize: 10,
+  marginBottom: 1,
+},
+slotCellEmpty: {
+  opacity: 0.45,
+},
   slotCount: {
-    ...typography.value,
-  },
+  ...typography.value,
+  fontSize: 14,          
+},
   preparedList: {
     marginBottom: spacing.md,
   },
