@@ -8,6 +8,13 @@ export const PUGILIST_CLASS = {
   unarmedAttackName:  'Fisticuffs',
   unarmedAttackTag:   'Unarmed',
 
+tableColumns: [
+  { key: 'profBonus',   label: 'Prof',        flex: 0.6 },
+  { key: 'fisticuffs',  label: 'Fisticuffs',  flex: 0.8 },
+  { key: 'moxiePoints', label: 'Moxie',       flex: 0.6 },
+  { key: 'features',    label: 'Features',    flex: 2   },
+],
+
   // Level table: level → { profBonus, fisticuffs, moxiePoints, features[] }
   levels: {
     1:  { profBonus: 2, fisticuffs: '1d6',  moxiePoints: 0,  features: ['Fisticuffs', 'Iron Chin'] },

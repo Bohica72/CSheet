@@ -17,7 +17,6 @@ if (Array.isArray(spellsData)) {
 } else if (Array.isArray(spellsData?.default?.spell)) {
   allSpells = spellsData.default.spell;
 } else {
-  console.warn('spells.json shape not recognised:', Object.keys(spellsData ?? {}));
 }
 
 const SCHOOL_NAMES = {
@@ -168,30 +167,29 @@ export default function MagicScreen({ route }) {
     .filter(Boolean);
 
   // Helper to check if a spell belongs to the character's class
-  // 1. Loosen the filter to accept both objects and strings from the JSON
-  const isClassSpell = (spell) => {
-    const classList = spell.classes?.fromClassList || [];
-    return classList.some(c => {
-      const className = typeof c === 'string' ? c : c.name;
-      return className?.toLowerCase() === character.classId?.toLowerCase();
-    });
-  };
+// 1. First - isClassSpell (no dependencies)
+const isClassSpell = (spell) => {
+  const classSpellList = classData?.spellList ?? [];
+  if (classSpellList.length === 0) return true;
+  return classSpellList.includes(spell.name);
+};
 
-  const visibleCantrips = cantrips.filter(s =>
-    isClassSpell(s) && s.name.toLowerCase().includes(search.toLowerCase())
-  );
+// 2. Second - maxSpellLevel (depends on levelSlots)
+const maxSpellLevel = levelSlots.length > 0
+  ? levelSlots.reduce((max, slots, index) => (slots > 0 ? index + 1 : max), 0)
+  : Math.ceil((character.level || 1) / 2);
 
-  // 2. Safe fallback: If spell slots aren't manually defined in ClassStore, 
-  // assume standard Full-Caster progression (Level / 2, rounded up).
-  const maxSpellLevel = levelSlots.length > 0 
-    ? levelSlots.reduce((max, slots, index) => (slots > 0 ? index + 1 : max), 0)
-    : Math.ceil((character.level || 1) / 2);
+// 3. Third - visibleCantrips and visibleSpells (depend on both above)
+const visibleCantrips = cantrips.filter(s =>
+  isClassSpell(s) && s.name.toLowerCase().includes(search.toLowerCase())
+);
 
-  const visibleSpells = levelledSpells.filter(s =>
-    isClassSpell(s) && 
-    s.level <= maxSpellLevel && 
-    s.name.toLowerCase().includes(search.toLowerCase())
-  );
+const visibleSpells = levelledSpells.filter(s =>
+  isClassSpell(s) &&
+  s.level <= maxSpellLevel &&
+  s.name.toLowerCase().includes(search.toLowerCase())
+);
+
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -199,14 +197,13 @@ export default function MagicScreen({ route }) {
       <View style={styles.tabContainer}>
         <TouchableOpacity 
           style={[styles.tabButton, activeTab === 'active' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('active')}
+          onPress={() => { setActiveTab('active'); setSearch(''); }}
         >
           <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>Active Spells</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tabButton, activeTab === 'library' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('library')}
-        >
+          onPress={() => { setActiveTab('library'); setSearch(''); }}        >
           <Text style={[styles.tabText, activeTab === 'library' && styles.tabTextActive]}>Spell Library</Text>
         </TouchableOpacity>
       </View>
