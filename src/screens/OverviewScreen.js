@@ -9,6 +9,9 @@ import { getItemByName } from '../utils/ItemStore';
 import { Character } from '../models/Character';
 import { initWeaponStore, getWeaponDamageByName } from '../utils/WeaponStore';
 import { getClassData } from '../utils/ClassStore';
+import { getFeats } from '../utils/DataLoader';
+import { applyFeatEffects, FEAT_EFFECTS } from '../data/featEffects';
+import { formatFeatSummary } from '../utils/featUtils';
 import {
   colors, spacing, radius, typography,
   shadows, sharedStyles
@@ -61,6 +64,41 @@ export default function OverviewScreen({ route, onRegisterActions }) {
   const [weaponStoreReady, setWeaponStoreReady]           = useState(false);
   const [secondWindUsed, setSecondWindUsed] = useState(character.secondWindUsed ?? 0);
   const [actionSurgeUsed, setActionSurgeUsed] = useState(character.actionSurgeUsed ?? 0);
+  const [asiChoice, setAsiChoice]         = useState(null);   // 'asi' or 'feat'
+  const [asiStats, setAsiStats]           = useState([]);      // up to 2 stats for ASI
+  const [asiStat1, setAsiStat1]           = useState(null);    // first stat
+  const [asiStat2, setAsiStat2]           = useState(null);    // second stat (optional)
+  const [selectedFeat, setSelectedFeat]   = useState(null);    // chosen feat object
+  const [featChoices, setFeatChoices]     = useState({});      // ability choice for feat
+  const [featModalVisible, setFeatModalVisible] = useState(false); // stat choice modal
+  const [pendingFeat, setPendingFeat]     = useState(null);
+  const ASI_LEVELS = {
+  default: [4, 8, 12, 16, 19],
+  fighter: [4, 6, 8, 12, 14, 16, 19],
+  rogue:   [4, 8, 10, 12, 16, 19],
+};
+
+const grantsASI = (classId, level) => {
+  const levels = ASI_LEVELS[classId] ?? ASI_LEVELS.default;
+  return levels.includes(level);
+};
+
+
+
+  const meetsPrerequisites = (feat, char, newLevel) => {
+    if (!feat.prerequisite) return true;
+    return feat.prerequisite.every(prereq => {
+      if (prereq.level && newLevel < prereq.level) return false;
+      if (prereq.ability) {
+        return prereq.ability.every(ab =>
+          Object.entries(ab).every(([stat, min]) =>
+            (char.abilities?.[stat] ?? 0) >= min
+          )
+        );
+      }
+      return true;
+    });
+  };
 
 
 
@@ -285,42 +323,85 @@ const calcLevelUp = () => {
     };
   };
 const doLevelUp = () => {
-    const calc = calcLevelUp();
-    if (!calc) return;
+  const calc = calcLevelUp();
+  if (!calc) return;
 
-    const { newLevel, newHpMax, hpIncrease, newProfBonus } = calc;
-    
-    // 4. Force Current HP and Hit Dice to be solid numbers
-    const safeHpCurrent = parseInt(hpCurrent, 10) || parseInt(character.hpCurrent, 10) || 10;
-    const newHpCurrent = safeHpCurrent + hpIncrease;
-    
-    const safeDiceRemaining = parseInt(hitDiceRemaining, 10) || parseInt(character.hitDiceRemaining, 10) || 1;
-    const newDiceRemaining = safeDiceRemaining + 1;
+  const { newLevel, newHpMax, hpIncrease, newProfBonus } = calc;
 
-    // 5. Update local React state
-    setCharacterLevel(newLevel);
-    setHpCurrent(newHpCurrent);
-    setHitDiceRemaining(newDiceRemaining);
+  const safeHpCurrent     = parseInt(hpCurrent, 10) || parseInt(character.hpCurrent, 10) || 10;
+  const newHpCurrent      = safeHpCurrent + hpIncrease;
+  const safeDiceRemaining = parseInt(hitDiceRemaining, 10) || parseInt(character.hitDiceRemaining, 10) || 1;
+  const newDiceRemaining  = safeDiceRemaining + 1;
 
-    // 6. THE SILVER BULLET: Force the character instance to update immediately!
-    // This stops the UI from rendering "Level NaN" or "NaN/d12" while waiting for the database.
-    character.level = newLevel;
-    character.hpMax = newHpMax;
-    character.hpCurrent = newHpCurrent;
-    character.hitDiceRemaining = newDiceRemaining;
-    character.proficiencyBonus = newProfBonus;
+  // Base updates
+  let updatedAbilities    = { ...character.abilities };
+  let updatedFeats        = [...(character.feats ?? [])];
+  let updatedProficiencies = { ...character.proficiencies };
 
-   // 7. Save to database
-    persist({
-      level: newLevel,
-      hpMax: newHpMax,
-      hpCurrent: newHpCurrent,
-      hitDiceRemaining: newDiceRemaining,
-      proficiencyBonus: newProfBonus,
+  // Apply ASI
+  if (asiChoice === 'asi' && asiStats.length > 0) {
+    if (asiStats.length === 1) {
+      updatedAbilities[asiStats[0]] = (updatedAbilities[asiStats[0]] ?? 10) + 2;
+    } else {
+      for (const stat of asiStats) {
+        updatedAbilities[stat] = (updatedAbilities[stat] ?? 10) + 1;
+      }
+    }
+  }
+
+  // Apply feat
+  if (asiChoice === 'feat' && selectedFeat) {
+    const applied = applyFeatEffects(
+      { ...character, abilities: updatedAbilities, proficiencies: updatedProficiencies },
+      selectedFeat.name,
+      featChoices
+    );
+    updatedAbilities     = applied.abilities;
+    updatedProficiencies = applied.proficiencies;
+    updatedFeats.push({
+      name:        selectedFeat.name,
+      source:      selectedFeat.source,
+      takenAtLevel: newLevel,
     });
+  }
 
-    setLevelUpModalVisible(false);
-  }; 
+  // Update local state
+  setCharacterLevel(newLevel);
+  setHpCurrent(newHpCurrent);
+  setHitDiceRemaining(newDiceRemaining);
+
+  // Update character instance immediately
+  character.level            = newLevel;
+  character.hpMax            = newHpMax;
+  character.hpCurrent        = newHpCurrent;
+  character.hitDiceRemaining = newDiceRemaining;
+  character.proficiencyBonus = newProfBonus;
+  character.abilities        = updatedAbilities;
+  character.feats            = updatedFeats;
+  character.proficiencies    = updatedProficiencies;
+
+  // Persist
+  persist({
+    level:            newLevel,
+    hpMax:            newHpMax,
+    hpCurrent:        newHpCurrent,
+    hitDiceRemaining: newDiceRemaining,
+    proficiencyBonus: newProfBonus,
+    abilities:        updatedAbilities,
+    feats:            updatedFeats,
+    proficiencies:    updatedProficiencies,
+  });
+
+  // Reset choice state
+  setAsiChoice(null);
+  setAsiStats([]);
+  setAsiStat1(null);
+  setAsiStat2(null);
+  setSelectedFeat(null);
+  setFeatChoices({});
+  setLevelUpModalVisible(false);
+};
+
   
   const getItemBonusSummary = (item) => {
     if (!item) return null;
@@ -513,6 +594,7 @@ const doLevelUp = () => {
 </View>
 
 
+
         {/* ATTACKS */}
         {(() => {
           const unarmed = character.getUnarmedAttack();
@@ -598,6 +680,8 @@ const doLevelUp = () => {
         {equippedAttacks.length === 0 && (
           <Text style={styles.emptyText}>Equip a weapon in Inventory to add attacks</Text>
         )}
+
+        
 
         {/* EQUIPPED ITEMS */}
         <Text style={sharedStyles.sectionHeader}>Equipped Items</Text>
@@ -800,78 +884,254 @@ const doLevelUp = () => {
       </Modal>
 
       {/* LEVEL UP MODAL */}
-      <Modal visible={levelUpModalVisible} transparent animationType="slide">
-        <View style={sharedStyles.modalOverlay}>
-          <View style={sharedStyles.modalBox}>
-            <Text style={sharedStyles.modalTitle}>Level Up</Text>
-            {(() => {
-  const calc = calcLevelUp();
-  if (!calc) return (
-    <Text style={styles.modalSub}>Already at maximum level!</Text>
-  );
-  const { newLevel, hpIncrease, newProfBonus, levelData } = calc;
-  return (
-    <>
-      <View style={styles.levelUpPreview}>
-        <View style={styles.levelUpRow}>
-          <Text style={styles.levelUpLabel}>Level</Text>
-          <Text style={styles.levelUpValue}>
-            {characterLevel} → <Text style={{ color: colors.gold }}>{newLevel}</Text>
-          </Text>
-        </View>
-        <View style={styles.levelUpRow}>
-          <Text style={styles.levelUpLabel}>Hit Points</Text>
-          <Text style={styles.levelUpValue}>
-            +<Text style={{ color: colors.success }}>{hpIncrease}</Text>
-            <Text style={styles.levelUpMeta}>
-              {' '}(avg d{hitDieFaces} {conMod >= 0 ? `+${conMod}` : conMod} CON)
-            </Text>
-          </Text>
-        </View>
-        <View style={styles.levelUpRow}>
-          <Text style={styles.levelUpLabel}>Proficiency</Text>
-          <Text style={styles.levelUpValue}>
-            +<Text style={{ color: colors.accentSoft }}>{newProfBonus}</Text>
-          </Text>
-        </View>
+<Modal visible={levelUpModalVisible} transparent animationType="slide">
+  <View style={sharedStyles.modalOverlay}>
+    <View style={sharedStyles.modalBox}>
+      <Text style={sharedStyles.modalTitle}>Level Up</Text>
+      {(() => {
+        const calc = calcLevelUp();
+        if (!calc) return (
+          <Text style={styles.modalSub}>Already at maximum level!</Text>
+        );
 
-        {/* New optional rows */}
-        {levelData.fisticuffs != null && (
-          <View style={styles.levelUpRow}>
-            <Text style={styles.levelUpLabel}>Fisticuffs</Text>
-            <Text style={styles.levelUpValue}>
-              <Text style={{ color: colors.accent }}>{levelData.fisticuffs}</Text>
-            </Text>
-          </View>
-        )}
-        {levelData.resourceMax != null && (
-          <View style={styles.levelUpRow}>
-            <Text style={styles.levelUpLabel}>{classData?.resource?.name ?? 'Resource'}</Text>
-            <Text style={styles.levelUpValue}>
-              <Text style={{ color: colors.gold }}>{levelData.resourceMax}</Text>
-            </Text>
-          </View>
-        )}
-      </View>
+        const { newLevel, hpIncrease, newProfBonus, levelData } = calc;
+        const isASILevel = grantsASI(character.classId, newLevel);
 
-      <TouchableOpacity
-        style={[sharedStyles.primaryButton, { backgroundColor: colors.gold }]}
-        onPress={doLevelUp}
-      >
-        <Text style={[sharedStyles.primaryButtonText, { color: colors.background }]}>
-          Confirm Level Up to {newLevel}
-        </Text>
-      </TouchableOpacity>
-    </>
-  );
-})()}
+        return (
+          <>
+            {/* Stats preview */}
+            <View style={styles.levelUpPreview}>
+              <View style={styles.levelUpRow}>
+                <Text style={styles.levelUpLabel}>Level</Text>
+                <Text style={styles.levelUpValue}>
+                  {characterLevel} → <Text style={{ color: colors.gold }}>{newLevel}</Text>
+                </Text>
+              </View>
+              <View style={styles.levelUpRow}>
+                <Text style={styles.levelUpLabel}>Hit Points</Text>
+                <Text style={styles.levelUpValue}>
+                  +<Text style={{ color: colors.success }}>{hpIncrease}</Text>
+                  <Text style={styles.levelUpMeta}>
+                    {' '}(avg d{hitDieFaces} {conMod >= 0 ? `+${conMod}` : conMod} CON)
+                  </Text>
+                </Text>
+              </View>
+              <View style={styles.levelUpRow}>
+                <Text style={styles.levelUpLabel}>Proficiency</Text>
+                <Text style={styles.levelUpValue}>
+                  +<Text style={{ color: colors.accentSoft }}>{newProfBonus}</Text>
+                </Text>
+              </View>
+              {levelData.fisticuffs != null && (
+                <View style={styles.levelUpRow}>
+                  <Text style={styles.levelUpLabel}>Fisticuffs</Text>
+                  <Text style={styles.levelUpValue}>
+                    <Text style={{ color: colors.accent }}>{levelData.fisticuffs}</Text>
+                  </Text>
+                </View>
+              )}
+              {levelData.resourceMax != null && (
+                <View style={styles.levelUpRow}>
+                  <Text style={styles.levelUpLabel}>{classData?.resource?.name ?? 'Resource'}</Text>
+                  <Text style={styles.levelUpValue}>
+                    <Text style={{ color: colors.gold }}>{levelData.resourceMax}</Text>
+                  </Text>
+                </View>
+              )}
+            </View>
 
-            <TouchableOpacity onPress={() => setLevelUpModalVisible(false)}>
-              <Text style={sharedStyles.cancelText}>Cancel</Text>
+            {/* ASI / Feat choice — only shown at appropriate levels */}
+            {isASILevel && (
+              <View style={styles.asiSection}>
+                <Text style={styles.asiTitle}>Ability Score Improvement</Text>
+
+                {/* Toggle buttons */}
+                <View style={styles.asiToggle}>
+                  <TouchableOpacity
+                    style={[styles.asiToggleBtn, asiChoice === 'asi' && styles.asiToggleBtnActive]}
+                    onPress={() => { setAsiChoice('asi'); setSelectedFeat(null); setFeatChoices({}); }}
+                  >
+                    <Text style={[styles.asiToggleText, asiChoice === 'asi' && styles.asiToggleTextActive]}>
+                      +2 Ability Score
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.asiToggleBtn, asiChoice === 'feat' && styles.asiToggleBtnActive]}
+                    onPress={() => { setAsiChoice('feat'); setAsiStats([]); }}
+                  >
+                    <Text style={[styles.asiToggleText, asiChoice === 'feat' && styles.asiToggleTextActive]}>
+                      Take a Feat
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* ASI stat picker */}
+                {asiChoice === 'asi' && (
+                  <View>
+                    <Text style={styles.asiHint}>
+                      {asiStats.length === 0 && 'Tap a stat to add +2, or tap two stats for +1 each'}
+                      {asiStats.length === 1 && `+2 ${asiStats[0].toUpperCase()} — or tap another for +1/+1`}
+                      {asiStats.length === 2 && `+1 ${asiStats[0].toUpperCase()}, +1 ${asiStats[1].toUpperCase()}`}
+                    </Text>
+                    <View style={styles.asiStatGrid}>
+                      {['str','dex','con','int','wis','cha'].map(stat => {
+                        const isChosen = asiStats.includes(stat);
+                        return (
+                          <TouchableOpacity
+                            key={stat}
+                            style={[styles.asiStatBtn, isChosen && styles.asiStatBtnActive]}
+                            onPress={() => {
+                              if (isChosen) {
+                                setAsiStats(prev => prev.filter(s => s !== stat));
+                              } else if (asiStats.length < 2) {
+                                setAsiStats(prev => [...prev, stat]);
+                              }
+                            }}
+                          >
+                            <Text style={[styles.asiStatLabel, isChosen && styles.asiStatLabelActive]}>
+                              {stat.toUpperCase()}
+                            </Text>
+                            <Text style={[styles.asiStatScore, isChosen && styles.asiStatLabelActive]}>
+                              {character.abilities?.[stat] ?? 10}
+                              {isChosen && (
+                                <Text style={{ color: colors.success }}>
+                                  {asiStats.length === 1 ? '+2' : '+1'}
+                                </Text>
+                              )}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {/* Feat picker */}
+                {asiChoice === 'feat' && (
+                  <ScrollView style={{ maxHeight: 240 }}>
+                    {getFeats()
+                      .filter(f =>
+                        f.source === 'XPHB' &&
+                        f.category !== 'O' &&        // exclude background feats
+                        f.category !== 'EB' &&       // exclude epic boons
+                        meetsPrerequisites(f, character, newLevel) &&
+                        !(character.feats ?? []).some(cf => cf.name === f.name)
+                      )
+                      .map(feat => {
+                        const isSelected = selectedFeat?.name === feat.name;
+                        return (
+                          <TouchableOpacity
+                            key={feat.name}
+                            style={[styles.featRow, isSelected && styles.featRowSelected]}
+                            onPress={() => {
+                              const effect = FEAT_EFFECTS[feat.name];
+                              if (effect?.abilityBonus?.type === 'choice') {
+                                setPendingFeat(feat);
+                                setFeatModalVisible(true);
+                              } else {
+                                setSelectedFeat(feat);
+                                setFeatChoices({});
+                              }
+                            }}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.featName}>{feat.name}</Text>
+                              <Text style={styles.featMeta}>{formatFeatSummary(feat)}</Text>
+                            </View>
+                            {isSelected && (
+                              <Ionicons name="checkmark" size={18} color={colors.accent} />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                  </ScrollView>
+                )}
+              </View>
+            )}
+
+            {/* Confirm button — disabled if ASI level but no choice made */}
+            <TouchableOpacity
+              style={[
+                sharedStyles.primaryButton,
+                { backgroundColor: colors.gold },
+                isASILevel && !asiChoice && { opacity: 0.4 },
+                isASILevel && asiChoice === 'asi' && asiStats.length === 0 && { opacity: 0.4 },
+                isASILevel && asiChoice === 'feat' && !selectedFeat && { opacity: 0.4 },
+              ]}
+              onPress={doLevelUp}
+              disabled={
+                isASILevel && (
+                  !asiChoice ||
+                  (asiChoice === 'asi' && asiStats.length === 0) ||
+                  (asiChoice === 'feat' && !selectedFeat)
+                )
+              }
+            >
+              <Text style={[sharedStyles.primaryButtonText, { color: colors.background }]}>
+                Confirm Level Up to {newLevel}
+              </Text>
             </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+          </>
+        );
+      })()}
+
+      <TouchableOpacity onPress={() => {
+        setLevelUpModalVisible(false);
+        setAsiChoice(null);
+        setAsiStats([]);
+        setSelectedFeat(null);
+        setFeatChoices({});
+      }}>
+        <Text style={sharedStyles.cancelText}>Cancel</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
+
+{/* Feat ability choice modal */}
+<Modal visible={featModalVisible} transparent animationType="fade">
+  <View style={sharedStyles.modalOverlay}>
+    <View style={sharedStyles.modalBox}>
+      <Text style={sharedStyles.modalTitle}>{pendingFeat?.name}</Text>
+      <Text style={styles.modalSub}>Choose one ability score to increase by 1:</Text>
+      <View style={styles.asiStatGrid}>
+        {FEAT_EFFECTS[pendingFeat?.name]?.abilityBonus?.from?.map(stat => {
+          const isChosen = featChoices.abilityStat === stat;
+          return (
+            <TouchableOpacity
+              key={stat}
+              style={[styles.asiStatBtn, isChosen && styles.asiStatBtnActive]}
+              onPress={() => setFeatChoices({ abilityStat: stat })}
+            >
+              <Text style={[styles.asiStatLabel, isChosen && styles.asiStatLabelActive]}>
+                {stat.toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <TouchableOpacity
+        style={[sharedStyles.primaryButton, !featChoices.abilityStat && { opacity: 0.4 }]}
+        disabled={!featChoices.abilityStat}
+        onPress={() => {
+          setSelectedFeat(pendingFeat);
+          setPendingFeat(null);
+          setFeatModalVisible(false);
+        }}
+      >
+        <Text style={sharedStyles.primaryButtonText}>Confirm</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => {
+        setPendingFeat(null);
+        setFeatChoices({});
+        setFeatModalVisible(false);
+      }}>
+        <Text style={sharedStyles.cancelText}>Cancel</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
+
 
       {/* BREAKDOWN MODAL — AC and weapon attacks */}
       <Modal visible={breakdownModalVisible} transparent animationType="fade">
@@ -1474,4 +1734,115 @@ topRow: {
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
+
+  devLevelDownButton: {
+  position: 'absolute',
+  bottom: spacing.xl + 80,
+  right: spacing.lg,
+  backgroundColor: colors.surfaceDeep,
+  borderRadius: radius.md,
+  padding: spacing.sm,
+  borderWidth: 1,
+  borderColor: colors.surfaceDeep,
+},
+asiSection: {
+  borderTopWidth: 1,
+  borderTopColor: colors.surfaceDeep,
+  paddingTop: spacing.md,
+  marginTop: spacing.md,
+},
+asiTitle: {
+  fontSize: 13,
+  fontWeight: 'bold',
+  color: colors.textMuted,
+  letterSpacing: 1,
+  textTransform: 'uppercase',
+  marginBottom: spacing.sm,
+},
+asiToggle: {
+  flexDirection: 'row',
+  backgroundColor: colors.surfaceDeep,
+  borderRadius: radius.md,
+  padding: 3,
+  marginBottom: spacing.md,
+},
+asiToggleBtn: {
+  flex: 1,
+  paddingVertical: spacing.sm,
+  alignItems: 'center',
+  borderRadius: radius.sm,
+},
+asiToggleBtnActive: {
+  backgroundColor: colors.accent,
+},
+asiToggleText: {
+  fontSize: 13,
+  fontWeight: '600',
+  color: colors.textMuted,
+},
+asiToggleTextActive: {
+  color: colors.textPrimary,
+},
+asiHint: {
+  ...typography.subtitle,
+  fontSize: 11,
+  textAlign: 'center',
+  marginBottom: spacing.sm,
+},
+asiStatGrid: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: spacing.sm,
+  justifyContent: 'center',
+},
+asiStatBtn: {
+  width: 52,
+  height: 52,
+  borderRadius: radius.md,
+  backgroundColor: colors.surfaceDeep,
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderWidth: 2,
+  borderColor: 'transparent',
+},
+asiStatBtnActive: {
+  borderColor: colors.accent,
+  backgroundColor: colors.surface,
+},
+asiStatLabel: {
+  fontSize: 11,
+  fontWeight: 'bold',
+  color: colors.textMuted,
+  letterSpacing: 1,
+},
+asiStatLabelActive: {
+  color: colors.accent,
+},
+asiStatScore: {
+  fontSize: 16,
+  fontWeight: 'bold',
+  color: colors.textPrimary,
+},
+featRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingVertical: spacing.sm,
+  paddingHorizontal: spacing.md,
+  borderRadius: radius.sm,
+  marginBottom: 2,
+},
+featRowSelected: {
+  backgroundColor: colors.surfaceDeep,
+},
+featName: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: colors.textPrimary,
+},
+featMeta: {
+  ...typography.subtitle,
+  fontSize: 11,
+  marginTop: 1,
+},
+
 });

@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity,
-  StyleSheet, ScrollView, StatusBar,
+  StyleSheet, ScrollView, StatusBar, Modal,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { getRaces, getClasses, getSubclassesForClass, getBackgrounds } from '../utils/DataLoader';
 import { addCharacter } from '../utils/CharacterStore';
 import { Character } from '../models/Character';
+import { getBackgroundFeats } from '../utils/DataLoader';
+import { applyFeatEffects, FEAT_EFFECTS } from '../data/featEffects';
+import { formatFeatSummary } from '../utils/featUtils';
+
+
+
 
 
 import { colors, spacing, typography, radius, shadows, sharedStyles } from '../styles/theme';
@@ -19,6 +25,7 @@ const STEPS = {
   CLASS:      'CLASS',
   SUBCLASS:   'SUBCLASS',
   BACKGROUND: 'BACKGROUND',
+  FEAT:       'FEAT',
   ABILITIES:  'ABILITIES',
   REVIEW:     'REVIEW',
 };
@@ -29,6 +36,7 @@ const STEP_ORDER = [
   STEPS.CLASS,
   STEPS.SUBCLASS,
   STEPS.BACKGROUND,
+  STEPS.FEAT,
   STEPS.ABILITIES,
   STEPS.REVIEW,
 ];
@@ -58,6 +66,8 @@ const INITIAL_STATE = {
   charClass:  null,
   subclass:   null,
   background: null,
+  feat:      null,
+  featChoices: {},
   abilities: {
     str: null, dex: null, con: null,
     int: null, wis: null, cha: null,
@@ -104,6 +114,8 @@ export default function CharacterCreationWizard() {
       case STEPS.RACE:       return wizard.race !== null;
       case STEPS.CLASS:      return wizard.charClass !== null;
       case STEPS.SUBCLASS:   return true;   // optional — can skip
+      case STEPS.FEAT:
+            return true; // optional
       case STEPS.BACKGROUND: return wizard.background !== null;
       case STEPS.ABILITIES:
           return Object.values(wizard.abilities).every(v => v !== null);
@@ -128,6 +140,7 @@ export default function CharacterCreationWizard() {
         }
       }
     }
+
 
     const finalAbilities = {
       str: (abilities.str ?? 8)  + racialBonuses.str,
@@ -158,9 +171,9 @@ export default function CharacterCreationWizard() {
         cha: finalAbilities.cha,
       },
 
-      classId:        charClass?.name?.toLowerCase() ?? null,
+      classId:        charClass?.name?.toLowerCase().replace(/\s+/g, '_') ?? null,
       classSource:    charClass?.source ?? null,
-      subclassId:     wizard.subclass?.shortName ?? null,
+      subclassId:     wizard.subclass?.shortName?.toLowerCase().replace(/\s+/g, '_') ?? null,
       subclassSource: wizard.subclass?.source ?? null,
       background:     background?.name ?? null,
       backgroundSource: background?.source ?? null,
@@ -188,9 +201,20 @@ export default function CharacterCreationWizard() {
       spellcastingAbility: charClass?.spellcastingAbility ?? null,
     };
 
-     await addCharacter(newChar);
-  const created = new Character(newChar);
-  navigation.replace('Character', { character: created });
+// Apply feat effects
+let newCharWithFeat = wizard.feat
+  ? applyFeatEffects(newChar, wizard.feat.name, wizard.featChoices)
+  : newChar;
+
+// Save feat to character
+newCharWithFeat.feats = wizard.feat
+  ? [{ name: wizard.feat.name, source: wizard.feat.source, takenAtLevel: 1 }]
+  : [];
+
+await addCharacter(newCharWithFeat);
+const created = new Character(newCharWithFeat);
+navigation.replace('Character', { character: created });
+
 };
 
 
@@ -234,6 +258,9 @@ export default function CharacterCreationWizard() {
           setSearch={setBackgroundSearch}
         />
       );
+      case STEPS.FEAT:
+        return <FeatStep wizard={wizard} update={update} />;
+
       case STEPS.ABILITIES: return (
         <AbilitiesStep wizard={wizard} update={update} setWizard={setWizard} />
       );
@@ -653,6 +680,168 @@ function BackgroundStep({ wizard, update, search, setSearch }) {
     </View>
   );
 }
+
+function FeatStep({ wizard, update }) {
+  const feats = getBackgroundFeats();
+  const [expanded, setExpanded] = useState(null);
+  const [pendingFeat, setPendingFeat] = useState(null);  // feat awaiting choice
+  const [chosenStat, setChosenStat] = useState(null);    // selected stat in modal
+
+  const handleFeatPress = (feat, isSelected) => {
+    if (isSelected) {
+      // Deselect — clear feat and any stored choices
+      update('feat', null);
+      update('featChoices', {});
+      return;
+    }
+
+    const effect = FEAT_EFFECTS[feat.name];
+    if (effect?.abilityBonus?.type === 'choice') {
+      // Needs a choice — open modal first
+      setPendingFeat(feat);
+      setChosenStat(null);
+    } else {
+      // No choice needed — select immediately
+      update('feat', feat);
+      update('featChoices', {});
+    }
+  };
+
+  const confirmChoice = () => {
+    if (!pendingFeat || !chosenStat) return;
+    update('feat', pendingFeat);
+    update('featChoices', { abilityStat: chosenStat });
+    setPendingFeat(null);
+    setChosenStat(null);
+  };
+
+  const dismissModal = () => {
+    setPendingFeat(null);
+    setChosenStat(null);
+  };
+
+  return (
+    <ScrollView contentContainerStyle={{ paddingBottom: spacing.xl }}>
+      <Text style={styles.stepDescription}>
+        Choose a background feat. You can also skip this and choose later.
+      </Text>
+
+      {/* Currently selected */}
+      {wizard.feat && (
+        <View style={styles.selectedCard}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.selectedName}>{wizard.feat.name}</Text>
+            <Text style={styles.selectedMeta}>
+              {wizard.feat.entries?.slice(0, 80)}...
+            </Text>
+            {wizard.featChoices?.abilityStat && (
+              <Text style={styles.selectedMeta}>
+                +1 {wizard.featChoices.abilityStat.toUpperCase()}
+              </Text>
+            )}
+          </View>
+          <Ionicons name="checkmark-circle" size={22} color={colors.accent} />
+        </View>
+      )}
+
+      {feats.map((feat, i) => {
+        const isSelected = wizard.feat?.name === feat.name;
+        const isExpanded = expanded === i;
+
+        return (
+          <View key={feat.name}>
+            <TouchableOpacity
+              style={[styles.raceRow, isSelected && styles.raceRowSelected]}
+              onPress={() => handleFeatPress(feat, isSelected)}
+            >
+              <View style={{ flex: 1 }}>
+                <View style={styles.raceRowTop}>
+                  <Text style={styles.raceName}>{feat.name}</Text>
+                </View>
+                <Text style={styles.raceMeta}>
+                  {formatFeatSummary(feat)}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+                {isSelected && (
+                  <Ionicons name="checkmark" size={18} color={colors.accent} />
+                )}
+                <TouchableOpacity onPress={() => setExpanded(isExpanded ? null : i)}>
+                  <Ionicons
+                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={colors.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+
+            {isExpanded && (
+              <View style={styles.featurePreview}>
+                <Text style={styles.featureText}>{feat.entries}</Text>
+              </View>
+            )}
+          </View>
+        );
+      })}
+
+      {/* Ability choice modal */}
+      <Modal
+        visible={!!pendingFeat}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{pendingFeat?.name}</Text>
+            <Text style={styles.modalSubtitle}>
+              Choose one ability score to increase by 1:
+            </Text>
+
+            <View style={styles.modalOptions}>
+              {FEAT_EFFECTS[pendingFeat?.name]?.abilityBonus?.from?.map(stat => (
+                <TouchableOpacity
+                  key={stat}
+                  style={[
+                    styles.modalStatButton,
+                    chosenStat === stat && styles.modalStatButtonSelected,
+                  ]}
+                  onPress={() => setChosenStat(stat)}
+                >
+                  <Text style={[
+                    styles.modalStatText,
+                    chosenStat === stat && styles.modalStatTextSelected,
+                  ]}>
+                    {stat.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={dismissModal}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmButton, !chosenStat && styles.nextButtonDisabled]}
+                onPress={confirmChoice}
+                disabled={!chosenStat}
+              >
+                <Text style={styles.modalConfirmText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </ScrollView>
+  );
+}
+
+
 
 // ─── Step: Abilities ──────────────────────────────────────────────────────────
 function rollStat() {
@@ -1516,4 +1705,83 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textMuted,
   },
+
+  modalOverlay: {
+  flex: 1,
+  backgroundColor: 'rgba(0,0,0,0.7)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  paddingHorizontal: spacing.lg,
+},
+modalCard: {
+  backgroundColor: colors.surface,
+  borderRadius: radius.md,
+  padding: spacing.lg,
+  width: '100%',
+  ...shadows.card,
+},
+modalTitle: {
+  fontSize: 18,
+  fontWeight: 'bold',
+  color: colors.textPrimary,
+  marginBottom: spacing.xs,
+},
+modalSubtitle: {
+  ...typography.subtitle,
+  marginBottom: spacing.lg,
+},
+modalOptions: {
+  flexDirection: 'row',
+  gap: spacing.sm,
+  justifyContent: 'center',
+  marginBottom: spacing.lg,
+},
+modalStatButton: {
+  width: 56,
+  height: 56,
+  borderRadius: radius.md,
+  backgroundColor: colors.surfaceDeep,
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderWidth: 2,
+  borderColor: 'transparent',
+},
+modalStatButtonSelected: {
+  borderColor: colors.accent,
+  backgroundColor: colors.surface,
+},
+modalStatText: {
+  fontSize: 14,
+  fontWeight: 'bold',
+  color: colors.textMuted,
+},
+modalStatTextSelected: {
+  color: colors.accent,
+},
+modalActions: {
+  flexDirection: 'row',
+  justifyContent: 'flex-end',
+  gap: spacing.md,
+},
+modalCancelButton: {
+  paddingVertical: spacing.sm,
+  paddingHorizontal: spacing.lg,
+},
+modalCancelText: {
+  color: colors.textMuted,
+  fontSize: 15,
+},
+modalConfirmButton: {
+  backgroundColor: colors.accent,
+  borderRadius: radius.md,
+  paddingVertical: spacing.sm,
+  paddingHorizontal: spacing.lg,
+  ...shadows.card,
+},
+modalConfirmText: {
+  color: colors.textPrimary,
+  fontSize: 15,
+  fontWeight: '600',
+},
+
 });

@@ -14,7 +14,7 @@ export class Character {
     
     // --- THE ANTIDOTE ---
     // parseInt converts "NaN" strings to actual NaN.
-    // The || operator forces any NaN, 0, undefined, or null to safely fallback to our defaults.
+    // The || operator forces any NaN, 0, undefined, or null to safely fallback to defaults.
     this.level       = parseInt(data.level, 10) || 1;
     this.ragesUsed   = parseInt(data.ragesUsed, 10) || 0;
 

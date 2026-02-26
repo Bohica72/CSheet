@@ -477,18 +477,47 @@ function flattenProficiencyChoices(profArray) {
   return { fixed, choices };
 }
 
+function parseFeatAbility(abilityArr) {
+  if (!abilityArr?.length) return null;
+  const entry = abilityArr[0];
+
+  // Choice between stats e.g. Heavily Armored
+  if (entry.choose) {
+    return {
+      type: 'choice',
+      from: entry.choose.from,       // ["con", "str"]
+      amount: entry.choose.amount ?? 1,
+    };
+  }
+
+  // Fixed bonus e.g. Great Weapon Master +1 STR
+  const bonuses = Object.entries(entry)
+    .filter(([k]) => ['str','dex','con','int','wis','cha'].includes(k))
+    .reduce((acc, [k, v]) => ({ ...acc, [k]: v }), {});
+
+  return Object.keys(bonuses).length
+    ? { type: 'fixed', bonuses }
+    : null;
+}
+
 // ─── Feats ────────────────────────────────────────────────────────────────────
 function parseFeats(data) {
+
+
+
   return (data.feat ?? []).map(f => ({
-    name:           f.name,
-    source:         f.source,
-    prerequisite:   f.prerequisite ?? null,
-    abilityBonuses: parseAbilityBonuses(f.ability),
-    entries:        renderEntries(f.entries ?? []),
-    proficiency:    f.proficiency ?? null,
-    category:       f.category ?? null,   // e.g. 'EB' for Epic Boon feats
+    name:               f.name,
+    source:             f.source,
+    category:           f.category ?? null,
+    prerequisite:       f.prerequisite ?? null,
+    abilityBonus:       parseFeatAbility(f.ability),      // ← renamed & fixed
+    armorProficiencies: f.armorProficiencies ?? null,     // ← was missing
+    weaponProficiencies: f.weaponProficiencies ?? null,   // ← was missing
+    skillProficiencies: f.skillProficiencies ?? null,     // ← was missing
+    entries:            renderEntries(f.entries ?? []),
   }));
 }
+
 
 // ─── Initialise ───────────────────────────────────────────────────────────────
 export function initialiseData() {
@@ -500,19 +529,16 @@ export function initialiseData() {
   _backgrounds = parseBackgrounds(backgroundData);
   _feats       = parseFeats(featData);
 
+  _feats = parseFeats(featData);
+
+
+
   const { parsedClasses, subclassIndex } = parseAllClasses(CLASS_FILES);
   _classes       = parsedClasses;
   _subclassIndex = subclassIndex;
 
   _initialised = true;
-  console.log(
-    `[DataLoader] Loaded: ${_races.length} races, ` +
-    `${_classes.length} classes, ` +
-    `${Object.keys(_subclassIndex).length} subclasses, ` +
-    `${_spells.length} spells, ` +
-    `${_backgrounds.length} backgrounds, ` +
-    `${_feats.length} feats`
-  );
+  
 }
 
 // ─── Public accessors ─────────────────────────────────────────────────────────
@@ -520,6 +546,8 @@ export const getRaces       = () => _races;
 export const getClasses     = () => _classes;
 export const getBackgrounds = () => _backgrounds;
 export const getFeats       = () => _feats;
+export const getBackgroundFeats = () =>
+  _feats.filter(f => f.category === 'O');
 
 export function getSubclassesForClass(className, classSource) {
   return Object.values(_subclassIndex).filter(
@@ -544,4 +572,6 @@ export function getClassByName(name, source = null) {
   return _classes.find(c =>
     c.name === name && (source === null || c.source === source)
   ) ?? null;
+
+
 }
