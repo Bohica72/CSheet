@@ -15,9 +15,7 @@ export default function ReferenceScreen({ route }) {
       </View>
     );
   }
-// In your reference screen, log this:
-console.log('char subclassId:', character.subclassId);
-console.log('available subclass keys:', Object.keys(subclasses ?? {}));
+
 
   return (
     <ClassReference

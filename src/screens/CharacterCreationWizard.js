@@ -160,6 +160,7 @@ export default function CharacterCreationWizard() {
       race:           race?.name ?? null,
       raceSource:     race?.source ?? null,
       level:          1,
+      eats: [], 
 
       // Save as nested object — Character.js reads this.abilities.str etc.
       abilities: {

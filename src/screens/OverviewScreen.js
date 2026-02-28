@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, TextInput,
   StyleSheet, ScrollView, Alert
@@ -16,7 +16,6 @@ import {
   colors, spacing, radius, typography,
   shadows, sharedStyles
 } from '../styles/theme';
-
 
 
 
@@ -64,6 +63,8 @@ export default function OverviewScreen({ route, onRegisterActions }) {
   const [weaponStoreReady, setWeaponStoreReady]           = useState(false);
   const [secondWindUsed, setSecondWindUsed] = useState(character.secondWindUsed ?? 0);
   const [actionSurgeUsed, setActionSurgeUsed] = useState(character.actionSurgeUsed ?? 0);
+  const [featDetail, setFeatDetail] = useState(null);
+  const [featDetailVisible, setFeatDetailVisible] = useState(false);
   const [asiChoice, setAsiChoice]         = useState(null);   // 'asi' or 'feat'
   const [asiStats, setAsiStats]           = useState([]);      // up to 2 stats for ASI
   const [asiStat1, setAsiStat1]           = useState(null);    // first stat
@@ -77,6 +78,12 @@ export default function OverviewScreen({ route, onRegisterActions }) {
   fighter: [4, 6, 8, 12, 14, 16, 19],
   rogue:   [4, 8, 10, 12, 16, 19],
 };
+
+const FEATS_BY_NAME = useMemo(() => {
+  const all = getFeats();
+  return Object.fromEntries(all.map(f => [f.name, f]));
+}, []);
+
 
 const grantsASI = (classId, level) => {
   const levels = ASI_LEVELS[classId] ?? ASI_LEVELS.default;
@@ -637,6 +644,40 @@ const doLevelUp = () => {
           );
         })()}
 
+        {/* ACTIVE FEATS */}
+{(character.feats?.length ?? 0) > 0 && (
+  <View style={{ marginTop: spacing.lg }}>
+    <Text style={sharedStyles.sectionHeader}>Feats
+    Feats: {character.feats.map(f => f.name).join(', ')}</Text>
+    {character.feats.map((feat, i) => {
+      const full = FEATS_BY_NAME[feat.name];
+      return (
+        <TouchableOpacity
+          key={`${feat.name}-${i}`}
+          style={styles.featChip}
+          delayLongPress={400}
+          activeOpacity={0.7}
+          onLongPress={() => {
+            setFeatDetail(full ?? feat);
+            setFeatDetailVisible(true);
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.featChipName}>{feat.name}</Text>
+            {full && (
+              <Text style={styles.featChipMeta} numberOfLines={1}>
+                {formatFeatSummary(full)}
+              </Text>
+            )}
+          </View>
+          <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+      );
+    })}
+  </View>
+)}
+
+
         {equippedAttacks.map((atk, i) => (
           <TouchableOpacity
             key={i}
@@ -653,6 +694,7 @@ const doLevelUp = () => {
                 damageDie:        atk.damageDie,
                 damageBonus:      atk.damageBonus, // Base modifier (STR)
                 appliedRageBonus: atk.appliedRageBonus,
+                featDamageBonus:  atk.featDamageBonus,
                 finalDamageBonus: atk.finalDamageBonus,
               };
               setBreakdownModalVisible(true);
@@ -672,13 +714,17 @@ const doLevelUp = () => {
               <Text style={styles.attackStatLabel}>DMG</Text>
               <Text style={styles.attackStat}>
                 {atk.damageDie}{atk.finalDamageBonus >= 0 ? '+' : ''}{atk.finalDamageBonus} {atk.damageType}
+              
               </Text>
+
             </View>
           </TouchableOpacity>
         ))}
 
+
         {equippedAttacks.length === 0 && (
           <Text style={styles.emptyText}>Equip a weapon in Inventory to add attacks</Text>
+        
         )}
 
         
@@ -846,6 +892,47 @@ const doLevelUp = () => {
           </View>
         </View>
       </Modal>
+<Modal
+  visible={featDetailVisible}
+  transparent
+  animationType="fade"
+  onRequestClose={() => setFeatDetailVisible(false)}
+>
+  <View style={sharedStyles.modalOverlay}>
+    <View style={sharedStyles.modalBox}>
+      <Text style={sharedStyles.modalTitle}>
+        {featDetail?.name ?? 'Feat'}
+      </Text>
+
+      {featDetail && (
+        <>
+          {featDetail.abilityBonus && (
+            <Text style={styles.featDetailMeta}>
+              {formatFeatSummary(featDetail)}
+            </Text>
+          )}
+           <ScrollView style={{ maxHeight: 260, marginTop: spacing.sm }}>
+              <Text style={styles.featDetailText}>
+                {Array.isArray(featDetail.entries)
+                  ? featDetail.entries
+                      .map(e => (typeof e === 'string' ? e : e?.text ?? e?.entries?.join(' ') ?? ''))
+                      .join('\n\n')
+                  : featDetail.entries ?? 'No description available.'}
+              </Text>
+           </ScrollView>
+
+        </>
+      )}
+
+      <TouchableOpacity
+        onPress={() => setFeatDetailVisible(false)}
+        style={{ marginTop: spacing.md }}
+      >
+        <Text style={sharedStyles.cancelText}>Close</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
 
       {/* EQUIPPED ITEM MODAL */}
       <Modal visible={equippedModalVisible} transparent animationType="fade">
@@ -990,7 +1077,7 @@ const doLevelUp = () => {
                           >
                             <Text style={[styles.asiStatLabel, isChosen && styles.asiStatLabelActive]}>
                               {stat.toUpperCase()}
-                            </Text>
+                            </Text>const full = featByName[feat.name];
                             <Text style={[styles.asiStatScore, isChosen && styles.asiStatLabelActive]}>
                               {character.abilities?.[stat] ?? 10}
                               {isChosen && (
@@ -1165,8 +1252,10 @@ const doLevelUp = () => {
                   {breakdownRef.current.appliedRageBonus > 0 && (
                     <BreakdownRow label="Rage Bonus" value={`+${breakdownRef.current.appliedRageBonus}`} />
                   )}
+                  {breakdownRef.current.featDamageBonus > 0 &&
+                  <BreakdownRow label="Feat Bonus"      value={`+${breakdownRef.current.featDamageBonus}`} />}
                   
-                  <BreakdownRow label="Total Bonus" value={`+${breakdownRef.current.finalDamageBonus}`} isTotal />
+                  <BreakdownRow label="Total Damage" value={`+${breakdownRef.current.finalDamageBonus}`} isTotal />
                 </View>
               </>
             ) : (
@@ -1297,6 +1386,9 @@ const doLevelUp = () => {
 
     </View>
   );
+
+
+
 }
 
 const styles = StyleSheet.create({
@@ -1844,5 +1936,38 @@ featMeta: {
   fontSize: 11,
   marginTop: 1,
 },
+
+featChip: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  backgroundColor: colors.surface,
+  borderRadius: radius.md,
+  paddingVertical: spacing.xs,
+  paddingHorizontal: spacing.md,
+  marginBottom: spacing.xs,
+  ...shadows.card,
+},
+featChipName: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: colors.textPrimary,
+},
+featChipMeta: {
+  ...typography.subtitle,
+  fontSize: 11,
+  marginTop: 2,
+},
+featDetailMeta: {
+  ...typography.subtitle,
+  fontSize: 12,
+  marginTop: spacing.xs,
+},
+featDetailText: {
+  fontSize: 13,
+  color: colors.textPrimary,
+  lineHeight: 18,
+},
+
 
 });

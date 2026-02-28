@@ -4,7 +4,16 @@ import { getWeaponDamageByName } from '../utils/WeaponStore';
 import { getClassData } from '../utils/ClassStore';
 import { getArmorStatsByName } from '../utils/ArmorStore';
 
-
+const HEAVY_WEAPONS = new Set([
+  'Greataxe',
+  'Greatsword',
+  'Halberd',
+  'Glaive',
+  'Pike',
+  'Maul',
+  'Lance',
+  'Heavy Crossbow',
+]);
 
 
 export class Character {
@@ -12,9 +21,7 @@ export class Character {
     this.id          = data.id;
     this.name        = data.name;
     
-    // --- THE ANTIDOTE ---
-    // parseInt converts "NaN" strings to actual NaN.
-    // The || operator forces any NaN, 0, undefined, or null to safely fallback to defaults.
+   
     this.level       = parseInt(data.level, 10) || 1;
     this.ragesUsed   = parseInt(data.ragesUsed, 10) || 0;
 
@@ -26,6 +33,7 @@ export class Character {
     this.classSource = data.classSource ?? null;
     this.knownCantrips = data.knownCantrips ?? [];
     this.isRaging  = data.isRaging ?? false;
+    this.feats       = data.feats ?? [];
 
     if (data.abilities) {
       this.abilities = data.abilities;
@@ -78,6 +86,8 @@ export class Character {
     this.overrides    = data.overrides ?? {};
   }
 
+
+
   // ─── Proficiency bonus ───────────────────────────────────────────────────────
 
   _calcProfBonus(level) {
@@ -87,6 +97,7 @@ export class Character {
     if (level >= 5)  return 3;
     return 2;
   }
+
 
   // ─── Class data ───────────────────────────────────────────────────────────────
 
@@ -298,8 +309,22 @@ getACBreakdown() {
     return this.getAbilityMod('str') + this.proficiencyBonus;
   }
 
- getEquippedWeaponAttacks() {
-  const attacks = (this.inventory ?? [])
+
+
+ 
+
+// ... rest of Character class
+
+getEquippedWeaponAttacks() {
+  const isBarbarian = this.classId?.toLowerCase() === 'barbarian';
+  const classData   = getClassData(this.classId);
+  const rageBonus   = isBarbarian && this.isRaging
+    ? (classData?.rageDamage?.[this.level] ?? 0)
+    : 0;
+
+  const hasGWM = this.feats?.some(f => f.name === 'Great Weapon Master');
+
+  return (this.inventory ?? [])
     .filter(entry => {
       if (!entry.equipped) return false;
       const item = getItemByName(entry.itemName);
@@ -311,38 +336,38 @@ getACBreakdown() {
       const isProficient = entry.proficient ?? true;
       const strMod       = this.getAbilityMod('str');
 
-      // Use BaseItem/Name/itemName as the lookup key
       const baseName = item.BaseItem ?? item.Name ?? entry.itemName;
       const dmgInfo  = getWeaponDamageByName(baseName);
 
-      // Fallback to 1d6 if somehow still unknown
       const damageDie  = dmgInfo?.dice ?? '1d6';
       const damageType = dmgInfo?.type ?? '';
 
-      // Barbarian rage bonus to damage, if raging
-      const isBarbarian = this.classId?.toLowerCase() === 'barbarian';
-      const classData   = this.getClassData?.();
-      const rageBonus   = isBarbarian && this.isRaging
-        ? (classData?.rageDamage?.[this.level] ?? 0)
-        : 0;
+      const weaponName = item.Name ?? entry.itemName ?? '';
+      const isHeavy = HEAVY_WEAPONS.has(weaponName)
+  || HEAVY_WEAPONS.has(item.BaseItem?.split('|')[0] ?? '')
+  || Array.from(HEAVY_WEAPONS).some(w => 
+      weaponName.toLowerCase().includes(w.toLowerCase())
+    );
 
-      const abilityDamageBonus = strMod + magicBonus + rageBonus;
+      const gwmBonus   = hasGWM && isHeavy ? 3 : 0;
+
+      const finalDamageBonus = strMod + magicBonus + rageBonus + gwmBonus;
 
       return {
-        name:        item.Name ?? entry.itemName,
-        attackBonus: strMod + (isProficient ? this.proficiencyBonus : 0) + magicBonus,
-        damageDie,                         // e.g. "1d8"
-        damageBonus: abilityDamageBonus,   // STR + magic + rage if active
-        damageType,                        // e.g. "Slashing"
+        name:             item.Name ?? entry.itemName,
+        attackBonus:      strMod + (isProficient ? this.proficiencyBonus : 0) + magicBonus,
+        damageDie,
+        damageType,
+        strMod,
         magicBonus,
         isProficient,
-        strMod,
-        isWeapon: true,
+        appliedRageBonus: rageBonus,
+        featDamageBonus:  gwmBonus,
+        damageBonus:      strMod,
+        finalDamageBonus,
+        isWeapon:         true,
       };
     });
-
-  console.log('getEquippedWeaponAttacks result:', attacks);
-  return attacks;
 }
 
 
@@ -356,9 +381,11 @@ getACBreakdown() {
       classId:             this.classId,
       classSource:         this.classSource,
       subclassId:          this.subclassId,
+      subclassSource:      this.subclassSource,
       race:                this.race,
       raceSource:          this.raceSource,
       background:          this.background,
+      backgroundSource:    this.backgroundSource,
       abilities:           this.abilities,
       proficiencyBonus:    this.proficiencyBonus,
       proficiencies:       this.proficiencies,
@@ -366,6 +393,9 @@ getACBreakdown() {
       bonuses:             this.bonuses,
       moxieCurrent:        this.moxieCurrent,
       spellcastingAbility: this.spellcastingAbility,
+      spellSlotsUsed:      this.spellSlotsUsed,
+      preparedSpells:      this.preparedSpells,
+      knownCantrips:       this.knownCantrips,
       hpMax:               this.hpMax,
       hpCurrent:           this.hpCurrent,
       hpTemp:              this.hpTemp,
@@ -377,9 +407,12 @@ getACBreakdown() {
       attunedItems:        this.attunedItems,
       attacks:             this.attacks,
       overrides:           this.overrides,
-      knownCantrips:       this.knownCantrips,
-      ragesUsed: this.ragesUsed,
-      isRaging: this.isRaging,
+      ragesUsed:           this.ragesUsed,
+      isRaging:            this.isRaging,
+      secondWindUsed:      this.secondWindUsed,
+      actionSurgeUsed:     this.actionSurgeUsed,
+      feats:               this.feats,
     };
   }
+
 }
