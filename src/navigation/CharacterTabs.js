@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Alert, StyleSheet, SafeAreaView, Keyboard, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radius, sharedStyles } from '../styles/theme';
 import { Character } from '../models/Character';
@@ -8,6 +8,8 @@ import OverviewScreen  from '../screens/OverviewScreen';
 import SkillsScreen    from '../screens/SkillsScreen';
 import InventoryScreen from '../screens/InventoryScreen';
 import ReferenceScreen from '../screens/ReferenceScreen';
+import { saveCharacter } from '../utils/CharacterStore';
+
 
 import { getClassData } from '../utils/ClassStore';
 import MagicScreen from '../screens/MagicScreen';
@@ -24,6 +26,74 @@ export default function CharacterTabs({ route }) {
   const [menuVisible, setMenuVisible]       = useState(false);
   const [restCallback, setRestCallback]     = useState(null);
   const [levelUpCallback, setLevelUpCallback] = useState(null);
+  const [createWeaponVisible, setCreateWeaponVisible] = useState(false);
+  const [weaponName, setWeaponName] = useState('');
+  const [weaponType, setWeaponType] = useState('');
+  const [weaponDice, setWeaponDice] = useState('1d6');
+  const [weaponModifier, setWeaponModifier] = useState('str');
+  const [weaponDescription, setWeaponDescription] = useState('');
+  const [weaponBonusWeapon, setWeaponBonusWeapon] = useState('0');
+  const [weaponAttunement, setWeaponAttunement] = useState(false);
+
+const resetAndClose = () => {
+  setWeaponName('');
+  setWeaponType('');
+  setWeaponDice('1d6');
+  setWeaponModifier('str');
+  setWeaponBonusWeapon('0');
+  setWeaponAttunement(false);
+  setWeaponDescription('');
+  setCreateWeaponVisible(false);
+};
+
+
+const handleSaveCustomWeapon = async () => {
+  Keyboard.dismiss();
+  if (!weaponName.trim()) {
+    Alert.alert('Missing Name', 'Please give your weapon a name.');
+    return;
+  }
+  if (!weaponType) {
+    Alert.alert('Missing Type', 'Please choose a weapon type.');
+    return;
+  }
+
+  const newEntry = {
+    itemName: weaponName.trim(),
+    quantity: 1,
+    equipped: false,
+    attuned: false,
+    charges: null,
+    // Fields that mirror the weapon format so the app treats it correctly
+    isCustomWeapon: true,
+    Name: weaponName.trim(),       // needed by getItemByName lookups
+    ObjectType: 'Weapon',          // THIS is what fixes the equipped list
+    Type: weaponType,
+    damageDie: weaponDice,
+    modifier: weaponModifier,
+    BonusWeapon: parseInt(weaponBonusWeapon, 10),
+    Attunement: weaponAttunement ? 'Yes' : 'No',
+    description: weaponDescription.trim(),
+    Description: weaponDescription.trim(), // both cases for safety
+  };
+
+  
+
+ // 3. Update and Save
+  try {
+    const updatedInventory = [...(character.inventory ?? []), newEntry];
+    character.inventory = updatedInventory;
+    
+    await saveCharacter(character);
+    resetAndClose();
+  } catch (error) {
+    Alert.alert("Error", "Failed to save weapon.");
+    console.error(error);
+  }
+};
+
+
+
 
   // 3. Build SCREENS and TABS after hooks
   const SCREENS = {
@@ -50,12 +120,131 @@ export default function CharacterTabs({ route }) {
     return (
       <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <Text>Unknown tab: {activeTab}</Text>
+
+        
       </SafeAreaView>
     );
   }
 
+
+
   return (
     <SafeAreaView style={styles.container}>
+
+    <Modal visible={createWeaponVisible} transparent animationType="slide">
+  <View style={sharedStyles.modalOverlay}>
+    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
+
+      <View style={sharedStyles.modalBox}>
+        <Text style={sharedStyles.modalTitle}>Create Custom Weapon</Text>
+
+        {/* Weapon Name */}
+        <Text style={styles.weaponLabel}>Weapon Name</Text>
+        <TextInput
+          style={sharedStyles.input}
+          placeholder="e.g. Ancestral Blade"
+          placeholderTextColor={colors.textDisabled}
+          value={weaponName}
+          onChangeText={setWeaponName}
+        />
+
+        {/* Weapon Type */}
+<Text style={styles.weaponLabel}>Weapon Type</Text>
+<View style={styles.chipGrid}>
+  {['Simple', 'Martial', 'Light', 'Heavy', 'Finesse', 'Ranged', 'Thrown', 'Versatile', 'Two-Handed'].map(type => (
+    <TouchableOpacity
+      key={type}
+      style={[styles.typeChip, weaponType === type && styles.typeChipActive]}
+      onPress={() => setWeaponType(type)}
+    >
+      <Text style={[styles.typeChipText, weaponType === type && styles.typeChipTextActive]}>
+        {type}
+      </Text>
+    </TouchableOpacity>
+  ))}
+</View>
+
+{/* Damage Dice */}
+<Text style={styles.weaponLabel}>Base Damage Dice</Text>
+<View style={styles.chipGrid}>
+  {['1d4', '1d6', '1d8', '1d10', '1d12', '2d6'].map(die => (
+    <TouchableOpacity
+      key={die}
+      style={[styles.typeChip, weaponDice === die && styles.typeChipActive]}
+      onPress={() => setWeaponDice(die)}
+    >
+      <Text style={[styles.typeChipText, weaponDice === die && styles.typeChipTextActive]}>
+        {die}
+      </Text>
+    </TouchableOpacity>
+  ))}
+</View>
+
+{/* Modifier */}
+<Text style={styles.weaponLabel}>Ability Modifier</Text>
+<View style={styles.chipGrid}>
+  {['str', 'dex', 'int', 'wis', 'cha'].map(mod => (
+    <TouchableOpacity
+      key={mod}
+      style={[styles.typeChip, weaponModifier === mod && styles.typeChipActive]}
+      onPress={() => setWeaponModifier(mod)}
+    >
+      <Text style={[styles.typeChipText, weaponModifier === mod && styles.typeChipTextActive]}>
+        {mod.toUpperCase()}
+      </Text>
+    </TouchableOpacity>
+  ))}
+</View>
+{/* Attack Bonus */}
+<Text style={styles.weaponLabel}>Attack / Damage Bonus</Text>
+<View style={styles.chipGrid}>
+  {['0', '1', '2', '3'].map(bonus => (
+    <TouchableOpacity
+      key={bonus}
+      style={[styles.typeChip, weaponBonusWeapon === bonus && styles.typeChipActive]}
+      onPress={() => setWeaponBonusWeapon(bonus)}
+    >
+      <Text style={[styles.typeChipText, weaponBonusWeapon === bonus && styles.typeChipTextActive]}>
+        +{bonus}
+      </Text>
+    </TouchableOpacity>
+  ))}
+</View>
+
+{/* Attunement */}
+<TouchableOpacity
+  style={[styles.typeChip, weaponAttunement && styles.typeChipActive, { marginBottom: spacing.md }]}
+  onPress={() => setWeaponAttunement(prev => !prev)}
+>
+  <Text style={[styles.typeChipText, weaponAttunement && styles.typeChipTextActive]}>
+    {weaponAttunement ? '✓ Requires Attunement' : 'Requires Attunement'}
+  </Text>
+</TouchableOpacity>
+
+
+
+        {/* Description */}
+        <Text style={styles.weaponLabel}>Description (optional)</Text>
+        <TextInput
+          style={[sharedStyles.input, { height: 80, textAlignVertical: 'top' }]}
+          placeholder="Describe your weapon..."
+          placeholderTextColor={colors.textDisabled}
+          value={weaponDescription}
+          onChangeText={setWeaponDescription}
+          multiline
+        />
+
+        <TouchableOpacity style={sharedStyles.primaryButton} onPress={handleSaveCustomWeapon}>
+          <Text style={sharedStyles.primaryButtonText}>Save to Inventory</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setCreateWeaponVisible(false)} style={{ marginTop: spacing.md }}>
+          <Text style={sharedStyles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  </View>
+</Modal>
+
 
       {/* Character name header */}
       <View style={styles.header}>
@@ -120,32 +309,43 @@ export default function CharacterTabs({ route }) {
           onPress={() => setMenuVisible(false)}
         >
           <View style={styles.menuBox}>
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuVisible(false);
-                setTimeout(() => levelUpCallback?.(), 300);
-              }}
-            >
-              <Ionicons name="arrow-up-circle" size={20} color={colors.gold} />
-              <Text style={styles.menuItemText}>Level Up</Text>
-            </TouchableOpacity>
+  <TouchableOpacity
+    style={styles.menuItem}
+    onPress={() => { setMenuVisible(false); setTimeout(() => levelUpCallback?.(), 300); }}
+  >
+    <Ionicons name="arrow-up-circle" size={20} color={colors.gold} />
+    <Text style={styles.menuItemText}>Level Up</Text>
+  </TouchableOpacity>
 
-            <View style={styles.menuDivider} />
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuVisible(false);
-                setTimeout(() => restCallback?.(), 300);
-              }}
-            >
-              <Ionicons name="moon" size={20} color={colors.accentSoft} />
-              <Text style={styles.menuItemText}>Take a Rest</Text>
-            </TouchableOpacity>
-          </View>
+
+  <View style={styles.menuDivider} />
+
+  <TouchableOpacity
+    style={styles.menuItem}
+    onPress={() => { setMenuVisible(false); setTimeout(() => restCallback?.(), 300); }}
+  >
+    <Ionicons name="moon" size={20} color={colors.accentSoft} />
+    <Text style={styles.menuItemText}>Take a Rest</Text>
+  </TouchableOpacity>
+
+  <View style={styles.menuDivider} />
+
+  {/* THIS IS WHAT'S MISSING */}
+  <TouchableOpacity
+    style={styles.menuItem}
+    onPress={() => { setMenuVisible(false); setTimeout(() => setCreateWeaponVisible(true), 300); }}
+  >
+    <Ionicons name="construct-outline" size={20} color={colors.accentSoft} />
+    <Text style={styles.menuItemText}>Create Weapon</Text>
+  </TouchableOpacity>
+</View>
+
         </TouchableOpacity>
       </Modal>
+
+      <View style={styles.menuDivider} />
+
 
     </SafeAreaView>
   );  // ← end of return
@@ -237,4 +437,43 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceDeep,
     marginHorizontal: spacing.md,
   },
+
+  weaponLabel: {
+  color: colors.textMuted,
+  fontSize: 11,
+  fontWeight: 'bold',
+  letterSpacing: 1,
+  textTransform: 'uppercase',
+  marginBottom: spacing.xs,
+},
+typeChip: {
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.xs,
+  borderRadius: radius.sm,
+  backgroundColor: colors.surfaceDeep,
+  borderWidth: 1,
+  borderColor: 'transparent',
+  marginRight: spacing.xs,
+},
+typeChipActive: {
+  borderColor: colors.accent,
+  backgroundColor: colors.surface,
+},
+typeChipText: {
+  color: colors.textMuted,
+  fontSize: 12,
+  fontWeight: '600',
+},
+typeChipTextActive: {
+  color: colors.accent,
+},
+
+chipGrid: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: spacing.xs,
+  marginBottom: spacing.md,
+},
+
+
 });
