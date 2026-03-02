@@ -168,16 +168,21 @@ const toggleRage = () => {
     ? (character.getEquippedWeaponAttacks?.() ?? [])
     : [];
 
-  // 2. Map over them to inject the base damage from the WeaponStore
+ // 2. Map over them to inject the base damage from the WeaponStore
   const equippedAttacks = rawAttacks.map(atk => {
     // Pass the name directly, exactly as InventoryScreen does!
     const dmgInfo = getWeaponDamageByName(atk.name);
     
+    // NEW: Find the actual equipped item in inventory to grab custom riders
+    const invItem = character.inventory?.find(i => i.itemName === atk.name && i.equipped);
+    
     return {
       ...atk,
-      // Grab the dice string (e.g., '1d8') and type (e.g., 'slashing')
       damageDie: dmgInfo ? dmgInfo.dice : (atk.damageDie ?? '—'),
       damageType: dmgInfo ? dmgInfo.type : '',
+      // NEW: Attach the extra damage data to the attack
+      extraDamageDie: invItem?.extraDamageDie,
+      extraDamageType: invItem?.extraDamageType,
     };
   });
 
@@ -504,10 +509,20 @@ const doLevelUp = () => {
       value: `+${character.proficiencyBonus}`,
       color: colors.accentSoft,
     },
-    {
+   {
       label: 'Speed',
-      value: `${character.speed}ft`,
-      color: colors.accentSoft,
+      // Dynamically display the override if it exists, otherwise fallback to base speed
+      value: `${character.overrides?.speed ?? character.speed}ft`,
+      // Optional: Turn the text Gold if an override is active so you know at a glance!
+      color: character.overrides?.speed ? colors.gold : colors.accentSoft,
+      onLongPress: () => {
+        // Tell the generic modal we are editing "speed"
+        overrideKeyRef.current = 'speed';
+        // Pre-fill the input with the current speed
+        setOverrideInput(String(character.overrides?.speed ?? character.speed));
+        // Pop open the exact same modal you use for AC!
+        setOverrideModalVisible(true);
+      },
     },
     {
       label: 'Pass. Perc',
@@ -629,8 +644,8 @@ const doLevelUp = () => {
                   type:        'attack',
                   ...unarmed,
                   attackTotal: unarmed.attackBonus,
-                  appliedRageBonus, // Pass to the modal
-                  finalDamageBonus, // Pass to the modal
+                  appliedRageBonus, 
+                  finalDamageBonus, 
                 };
                 setBreakdownModalVisible(true);
               }}
@@ -648,6 +663,7 @@ const doLevelUp = () => {
               <View style={styles.attackStatCol}>
                 <Text style={styles.attackStatLabel}>DMG</Text>
                 <Text style={styles.attackStat}>
+                  {/* Restored Unarmed logic */}
                   {unarmed.damageDie}{finalDamageBonus >= 0 ? '+' : ''}{finalDamageBonus}
                 </Text>
               </View>
@@ -655,7 +671,7 @@ const doLevelUp = () => {
           );
         })()}
 
-         {equippedAttacks.map((atk, i) => (
+        {equippedAttacks.map((atk, i) => (
           <TouchableOpacity
             key={i}
             style={[styles.attackRow, styles.attackRowWeapon]}
@@ -669,7 +685,7 @@ const doLevelUp = () => {
                 magicBonus:       atk.magicBonus,
                 attackTotal:      atk.attackBonus,
                 damageDie:        atk.damageDie,
-                damageBonus:      atk.damageBonus, // Base modifier (STR)
+                damageBonus:      atk.damageBonus, 
                 appliedRageBonus: atk.appliedRageBonus,
                 featDamageBonus:  atk.featDamageBonus,
                 finalDamageBonus: atk.finalDamageBonus,
@@ -691,9 +707,9 @@ const doLevelUp = () => {
               <Text style={styles.attackStatLabel}>DMG</Text>
               <Text style={styles.attackStat}>
                 {atk.damageDie}{atk.finalDamageBonus >= 0 ? '+' : ''}{atk.finalDamageBonus} {atk.damageType}
-              
+                {/* NEW: Dynamically append the extra damage if it exists! */}
+                {atk.extraDamageDie ? ` + ${atk.extraDamageDie} ${atk.extraDamageType || ''}`.trimEnd() : ''}
               </Text>
-
             </View>
           </TouchableOpacity>
         ))}

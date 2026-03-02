@@ -34,6 +34,8 @@ export default function CharacterTabs({ route, navigation }) {
   const [weaponDescription, setWeaponDescription] = useState('');
   const [weaponBonusWeapon, setWeaponBonusWeapon] = useState('0');
   const [weaponAttunement, setWeaponAttunement] = useState(false);
+  const [weaponExtraDamageDice, setWeaponExtraDamageDice] = useState('none');
+  const [weaponExtraDamageType, setWeaponExtraDamageType] = useState('');
 
 const resetAndClose = () => {
   setWeaponName('');
@@ -43,9 +45,13 @@ const resetAndClose = () => {
   setWeaponBonusWeapon('0');
   setWeaponAttunement(false);
   setWeaponDescription('');
+  
+  // Add these two!
+  setWeaponExtraDamageDice('none');
+  setWeaponExtraDamageType('');
+  
   setCreateWeaponVisible(false);
 };
-
 
 const handleSaveCustomWeapon = async () => {
   Keyboard.dismiss();
@@ -74,6 +80,9 @@ const handleSaveCustomWeapon = async () => {
     Attunement: weaponAttunement ? 'Yes' : 'No',
     description: weaponDescription.trim(),
     Description: weaponDescription.trim(), 
+    // NEW: Extra Damage mapping
+    extraDamageDie: weaponExtraDamageDice === 'none' ? null : weaponExtraDamageDice,
+    extraDamageType: weaponExtraDamageDice === 'none' ? null : weaponExtraDamageType.trim(),
   };
 
   try {
@@ -213,6 +222,36 @@ const handleSaveCustomWeapon = async () => {
     </TouchableOpacity>
   ))}
 </View>
+
+{/* Extra Damage (Riders) */}
+<Text style={styles.weaponLabel}>Extra Damage (e.g., Elemental Cleaver)</Text>
+<View style={styles.chipGrid}>
+  {['none', '1d4', '1d6', '1d8', '1d10', '1d12', '2d6'].map(die => (
+    <TouchableOpacity
+      key={die}
+      style={[styles.typeChip, weaponExtraDamageDice === die && styles.typeChipActive]}
+      onPress={() => setWeaponExtraDamageDice(die)}
+    >
+      <Text style={[styles.typeChipText, weaponExtraDamageDice === die && styles.typeChipTextActive]}>
+        {die.toUpperCase()}
+      </Text>
+    </TouchableOpacity>
+  ))}
+</View>
+
+{/* Only show the Damage Type input if they actually selected an extra die! */}
+{weaponExtraDamageDice !== 'none' && (
+  <>
+    <Text style={styles.weaponLabel}>Extra Damage Type</Text>
+    <TextInput
+      style={[sharedStyles.input, { marginBottom: spacing.md }]}
+      placeholder="e.g., Acid, Fire, Radiant..."
+      placeholderTextColor={colors.textDisabled}
+      value={weaponExtraDamageType}
+      onChangeText={setWeaponExtraDamageType}
+    />
+  </>
+)}
 
 {/* Attunement */}
 <View style={styles.attunementRow}>
