@@ -326,50 +326,64 @@ getEquippedWeaponAttacks() {
 
   return (this.inventory ?? [])
     .filter(entry => {
+      // Only show items that are equipped AND marked as a Weapon
       if (!entry.equipped) return false;
       const item = getItemByName(entry.itemName);
-      return item?.ObjectType === 'Weapon';
+      // It's a weapon if the store says so OR if we manually marked it as ObjectType 'Weapon'
+      return item?.ObjectType === 'Weapon' || entry.ObjectType === 'Weapon';
     })
     .map(entry => {
-      const item         = getItemByName(entry.itemName) ?? {};
-      const magicBonus   = item.BonusWeapon ?? 0;
+      const item = getItemByName(entry.itemName) ?? {};
+      const strMod = this.getAbilityMod('str');
       const isProficient = entry.proficient ?? true;
-      const strMod       = this.getAbilityMod('str');
+      
+      // Use the bonus from the entry (custom) or the static item (store)
+      const magicBonus = (entry.BonusWeapon ?? item.BonusWeapon) ?? 0;
 
-      const baseName = item.BaseItem ?? item.Name ?? entry.itemName;
-      const dmgInfo  = getWeaponDamageByName(baseName);
+      // --- STEP 1: Determine Damage Dice and Type ---
+      let damageDie = '1d6';
+      let damageType = '';
 
-      const damageDie  = dmgInfo?.dice ?? '1d6';
-      const damageType = dmgInfo?.type ?? '';
+      if (entry.isCustomWeapon) {
+        // Use exactly what the user typed in the modal
+        damageDie = entry.damageDie || '1d6';
+        damageType = entry.damageType || ''; 
+      } else {
+        // Look up the standard D&D stats from the WeaponStore
+        const baseName = item.BaseItem ?? item.Name ?? entry.itemName;
+        const dmgInfo = getWeaponDamageByName(baseName);
+        damageDie = dmgInfo?.dice ?? '1d6';
+        damageType = dmgInfo?.type ?? '';
+      }
 
+      // --- STEP 2: Calculate Bonuses (Rage, GWM, etc.) ---
       const weaponName = item.Name ?? entry.itemName ?? '';
+      
+      // Check if it's a Heavy weapon for Great Weapon Master feat
       const isHeavy = HEAVY_WEAPONS.has(weaponName)
-  || HEAVY_WEAPONS.has(item.BaseItem?.split('|')[0] ?? '')
-  || Array.from(HEAVY_WEAPONS).some(w => 
-      weaponName.toLowerCase().includes(w.toLowerCase())
-    );
+        || HEAVY_WEAPONS.has(item.BaseItem?.split('|')[0] ?? '')
+        || Array.from(HEAVY_WEAPONS).some(w => weaponName.toLowerCase().includes(w.toLowerCase()));
 
-      const gwmBonus   = hasGWM && isHeavy ? 3 : 0;
-
+      const gwmBonus = (hasGWM && isHeavy) ? 3 : 0;
       const finalDamageBonus = strMod + magicBonus + rageBonus + gwmBonus;
 
+      // --- STEP 3: Return the single unified object ---
       return {
-        name:             item.Name ?? entry.itemName,
-        attackBonus:      strMod + (isProficient ? this.proficiencyBonus : 0) + magicBonus,
+        name: entry.itemName, // The name the user sees
+        attackBonus: strMod + (isProficient ? this.proficiencyBonus : 0) + magicBonus,
         damageDie,
         damageType,
         strMod,
         magicBonus,
         isProficient,
         appliedRageBonus: rageBonus,
-        featDamageBonus:  gwmBonus,
-        damageBonus:      strMod,
+        featDamageBonus: gwmBonus,
+        damageBonus: strMod, // Base stat bonus
         finalDamageBonus,
-        isWeapon:         true,
+        isWeapon: true,
       };
     });
 }
-
 
   // ─── Serialisation ────────────────────────────────────────────────────────────
 

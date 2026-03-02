@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView,
   TouchableOpacity, StyleSheet
 } from 'react-native';
-import { colors, spacing, radius, typography, shadows, sharedStyles } from '../styles/theme';
+import { colors, spacing, radius, typography, shadows, sharedStyles } from '../styles/theme'; // Adjust path if needed
 
 // --- Expandable feature block ---
 function FeatureItem({ item, isSubclass }) {
@@ -29,9 +29,8 @@ function FeatureItem({ item, isSubclass }) {
 }
 
 // --- Reference table ---
-function ReferenceTable({ currentLevel, classData }) {
+function ReferenceTable({ currentLevel, classData, columns, chosenSubclass }) {
   const rows = Object.entries(classData.levels);
-  const columns = classData.tableColumns;
 
   return (
     <View style={styles.table}>
@@ -61,16 +60,34 @@ function ReferenceTable({ currentLevel, classData }) {
             <Text style={[styles.tableCell, { flex: 0.5 }, isCurrentLevel && styles.tableCellCurrent]}>
               {lvl}
             </Text>
-            {columns.map(col => (
-              <Text
-                key={col.key}
-                style={[styles.tableCell, { flex: col.flex ?? 1 }, isCurrentLevel && styles.tableCellCurrent]}
-              >
-                {col.key === 'features'
-                  ? (data.features ?? []).join(', ')
-                  : (data[col.key] ?? '—')}
-              </Text>
-            ))}
+            {columns.map(col => {
+              // 1. DYNAMIC TABLE INJECTION: Mix base features and subclass features into the table
+              if (col.key === 'features') {
+                const levelNum = Number(lvl);
+                const baseFeatures = data.features || [];
+                
+                // Hide the placeholder text if they actually have a subclass selected
+
+                const visibleBase = baseFeatures.filter(n => !(chosenSubclass && /subclass|archetype/i.test(n)));
+                const subFeatureNames = chosenSubclass?.features?.filter(f => f.level === levelNum).map(f => f.name) || [];
+                const allFeatures = [...visibleBase, ...subFeatureNames];
+                
+                return (
+                  <Text key={col.key} style={[styles.tableCell, { flex: col.flex ?? 1 }, isCurrentLevel && styles.tableCellCurrent]}>
+                    {allFeatures.length > 0 ? allFeatures.join(', ') : '—'}
+                  </Text>
+                );
+              }
+
+              return (
+                <Text
+                  key={col.key}
+                  style={[styles.tableCell, { flex: col.flex ?? 1 }, isCurrentLevel && styles.tableCellCurrent]}
+                >
+                  {data[col.key] === 999 ? '∞' : (data[col.key] ?? '—')}
+                </Text>
+              )
+            })}
           </View>
         );
       })}
@@ -82,12 +99,26 @@ function ReferenceTable({ currentLevel, classData }) {
 export default function ClassReference({ character, classData, subclasses }) {
   const currentLevel = character?.level ?? 1;
 
-  const chosenSubclass = character?.subclassId
-    ? subclasses?.[character.subclassId]
+  const savedSubclassId = character?.subclassId ? String(character.subclassId).toLowerCase() : null;
+
+  // Find the subclass using case-insensitive comparisons
+  const chosenSubclass = savedSubclassId
+    ? subclasses?.find(sc => 
+        sc.id.toLowerCase() === savedSubclassId || 
+        sc.name.toLowerCase() === savedSubclassId || 
+        (sc.shortName && sc.shortName.toLowerCase() === savedSubclassId) ||
+        sc.id === savedSubclassId.replace(/\s+/g, '_')
+      )
     : null;
-  const subclassLevels = chosenSubclass
-    ? Object.keys(chosenSubclass.features).map(Number)
-    : [];
+  // ----------
+
+
+
+  const columns = classData.tableColumns ?? [
+    { key: 'profBonus', label: 'Prof.', flex: 0.5 },
+    ...(classData.resource ? [{ key: 'resourceMax', label: classData.resource.name, flex: 0.8 }] : []),
+    { key: 'features', label: 'Features', flex: 2 }
+  ];
 
   return (
     <ScrollView
@@ -96,6 +127,21 @@ export default function ClassReference({ character, classData, subclasses }) {
     >
       {/* Header */}
       <View style={styles.headerBlock}>
+            <View style={{ height: 32 }} />
+{/* --- TEMPORARY DEBUG BANNER --- */}
+      <View style={{ backgroundColor: '#440000', padding: 10, marginVertical: 10, borderRadius: 8 }}>
+        <Text style={{ color: '#ffaaaa', fontWeight: 'bold' }}>DEBUG INFO:</Text>
+        <Text style={{ color: 'white' }}>
+          character.subclassId: {String(character?.subclassId || 'UNDEFINED')}
+        </Text>
+        <Text style={{ color: 'white' }}>
+          character.subclass: {String(character?.subclass || 'UNDEFINED')}
+        </Text>
+        <Text style={{ color: 'white' }}>
+          Matched Subclass: {chosenSubclass ? chosenSubclass.name : 'NONE FOUND'}
+        </Text>
+      </View>
+      {/* ------------------------------ */}
         <Text style={styles.headerTitle}>{classData.name}</Text>
         <Text style={styles.headerSub}>
           Hit Die: d{classData.hitDie}  ·  Saves: {classData.saves.map(s => s.toUpperCase()).join(', ')}
@@ -111,9 +157,14 @@ export default function ClassReference({ character, classData, subclasses }) {
       {Object.entries(classData.levels).map(([lvl, data]) => {
         const level          = Number(lvl);
         const isCurrentLevel = level === currentLevel;
-        const subFeatures    = subclassLevels.includes(level)
-          ? (chosenSubclass?.features[level] ?? [])
-          : [];
+        
+        const subFeatures = chosenSubclass?.features?.filter(f => f.level === level) || [];
+
+        // 2. PLACEHOLDER FILTER: Strip out generic terms if a subclass is active
+        const visibleClassFeatures = data.features.filter(name => {
+          const isPlaceholder = /subclass|archetype/i.test(name);
+          return !(chosenSubclass && isPlaceholder); 
+        });
 
         return (
           <View key={lvl}>
@@ -125,11 +176,12 @@ export default function ClassReference({ character, classData, subclasses }) {
                   {isCurrentLevel && <Text style={styles.currentBadge}> ← current</Text>}
                 </Text>
                 <Text style={styles.levelMeta}>
-                  {classData.tableColumns
+                  {columns
                     .filter(col => col.key !== 'features')
                     .map(col => {
                       const val = data[col.key];
-                      return col.format ? col.format(val) : (val ?? '—');
+                      const displayVal = val === 999 ? '∞' : (val ?? '—');
+                      return col.format ? col.format(displayVal) : `${col.label} ${displayVal}`;
                     })
                     .join('  ·  ')}
                 </Text>
@@ -137,19 +189,26 @@ export default function ClassReference({ character, classData, subclasses }) {
             </View>
 
             {/* Class features */}
-            {data.features.length > 0 ? (
-              data.features.map(name => (
-                <FeatureItem
-                  key={`class_${name}_${level}`}
-                  item={{
-                    name,
-                    description: classData.features[name]?.description ?? '',
-                  }}
-                  isSubclass={false}
-                />
-              ))
+            {visibleClassFeatures.length > 0 ? (
+              visibleClassFeatures.map(name => {
+                const isPlaceholder = /subclass|archetype/i.test(name);
+                return (
+                  <FeatureItem
+                    key={`class_${name}_${level}`}
+                    item={{
+                      name,
+                      // 3. FALLBACK DESCRIPTION: Give placeholders a helpful instruction instead of "unavailable"
+                      description: classData.featureDefinitions?.[name]?.description ?? 
+                        (isPlaceholder 
+                          ? `Select a ${classData.name} subclass on the edit screen to unlock features for this level.` 
+                          : 'Description unavailable.')
+                    }}
+                    isSubclass={false}
+                  />
+                );
+              })
             ) : (
-              <Text style={styles.levelNone}>No new class features.</Text>
+              subFeatures.length === 0 && <Text style={styles.levelNone}>No new class features.</Text>
             )}
 
             {/* Subclass features */}
@@ -166,12 +225,20 @@ export default function ClassReference({ character, classData, subclasses }) {
 
       {/* Reference table */}
       <Text style={styles.tableTitle}>Class Reference Table</Text>
-      <ReferenceTable currentLevel={currentLevel} classData={classData} />
-      <View style={{ height: 32 }} />
+      
+      {/* 4. Pass chosenSubclass to the table so it can inject the names */}
+      <ReferenceTable 
+        currentLevel={currentLevel} 
+        classData={classData} 
+        columns={columns} 
+        chosenSubclass={chosenSubclass} 
+      />
 
     </ScrollView>
   );
 }
+
+// ... Keep your existing StyleSheet at the bottom ...
 
 const styles = StyleSheet.create({
   container: {

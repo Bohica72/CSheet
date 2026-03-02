@@ -8,7 +8,7 @@ import { saveCharacter } from '../utils/CharacterStore';
 import { getItemByName } from '../utils/ItemStore';
 import { Character } from '../models/Character';
 import { initWeaponStore, getWeaponDamageByName } from '../utils/WeaponStore';
-import { getClassData } from '../utils/ClassStore';
+import { getClassData } from '../data/classes'; // Points directly to your new index.js!
 import { getFeats } from '../utils/DataLoader';
 import { applyFeatEffects, FEAT_EFFECTS } from '../data/featEffects';
 import { formatFeatSummary } from '../utils/featUtils';
@@ -109,29 +109,23 @@ const grantsASI = (classId, level) => {
 
 
 
-  const isFighter = character.classId === 'fighter';
-  const fighterLevelData = isFighter ? classData?.levels?.[characterLevel] : null;
-  const actionSurgeMax = isFighter
-    ? character.level >= 17
-      ? 2
-      : character.level >= 2
-      ? 1
-      : 0
-    : 0;
-  const breakdownRef        = useRef(null);
+const breakdownRef        = useRef(null);
   const overrideKeyRef      = useRef(null);
   const selectedEquippedRef = useRef(null);
 
+  const isFighter = character.classId === 'fighter';
   const isBarbarian = character.classId === 'barbarian';
-  // Barbarian rage values
-// Barbarian rage values - now looking at characterLevel state
-  const rageMax = isBarbarian
-    ? (classData?.ragesPerRest?.[characterLevel] ?? 0)
-    : 0;
 
+  // --- DYNAMIC RESOURCE LOOKUP ---
+  // This single source of truth replaces actionSurgeMax and rageMax!
+  const resourceMax = classData?.levels?.[characterLevel]?.resourceMax ?? 0;
+  const resourceName = classData?.resource?.name ?? 'Resource';
+
+  // Barbarian specific (keep this, as rage damage scales uniquely)
   const rageDamageBonus = isBarbarian
-    ? (classData?.rageDamage?.[characterLevel] ?? 2)
+    ? (classData?.progressionExtras?.rageDamage?.[characterLevel] ?? 2)
     : 0;
+  
 
 const [ragesUsed, setRagesUsed] = useState(character.ragesUsed ?? 0);
 const [isRaging, setIsRaging]   = useState(character.isRaging ?? false);
@@ -192,8 +186,19 @@ const toggleRage = () => {
   const hitDieFaces = parseInt(hitDice.split('d')[1], 10);
   const conMod      = character.getAbilityMod('con');
   const hpPercent   = Math.max(0, hpCurrent / character.hpMax);
-  const equippedItems = (character.inventory ?? []).filter(i => i.equipped);
+  const equippedItems = (character.inventory ?? []).filter(i => {
+  // 1. Must be equipped to even consider showing up
+  if (!i.equipped) return false;
 
+  // 2. Look up the item in the static store to see if it's a weapon
+  const staticItem = getItemByName(i.itemName);
+
+  // 3. Hide it if it's a weapon in the Store OR marked as a weapon in the Entry
+  const isWeapon = staticItem?.ObjectType === 'Weapon' || i.ObjectType === 'Weapon';
+
+  // 4. Only keep items that are NOT weapons
+  return !isWeapon;
+});
 
 
   const persist = async (updates) => {
@@ -293,7 +298,7 @@ const toggleRage = () => {
     });
     
     setRestModalVisible(false);
-    Alert.alert('Long Rest', 'HP, Moxie, Hit Dice, and Rages fully restored.');
+    Alert.alert('Long Rest', 'HP and Hit Dice Restored');
   };
 
 const calcLevelUp = () => {
@@ -478,7 +483,6 @@ const doLevelUp = () => {
 </View>
 
  {/* STATS GRID */}
-<Text style={sharedStyles.sectionHeader}>Combat Stats</Text>
 <View style={styles.grid}>
   {[
     {
@@ -520,7 +524,8 @@ const doLevelUp = () => {
         persist({ inspiration: newVal });
       },
     },
-    // Fighter-only: always show Second Wind; Action Surge only if level >= 2
+    
+    // Fighter-Specific Stats (Second Wind & Action Surge)
     ...(isFighter
       ? [
           {
@@ -533,14 +538,15 @@ const doLevelUp = () => {
               persist({ secondWindUsed: used });
             },
           },
-          ...(character.level >= 2
+          // Action Surge dynamically appears only when resourceMax > 0 (Level 2+)
+          ...(resourceMax > 0
             ? [
                 {
-                  label: 'Action Surge',
-                  value: `${actionSurgeUsed}/${actionSurgeMax}`,
+                  label: resourceName, 
+                  value: `${actionSurgeUsed}/${resourceMax}`,
                   color: colors.accentSoft,
                   onPress: () => {
-                    const next = (actionSurgeUsed + 1) % (actionSurgeMax + 1);
+                    const next = (actionSurgeUsed + 1) % (resourceMax + 1);
                     setActionSurgeUsed(next);
                     persist({ actionSurgeUsed: next });
                   },
@@ -549,53 +555,58 @@ const doLevelUp = () => {
             : []),
         ]
       : []),
-   // Barbarian-only: Rage
-      ...(isBarbarian
-        ? [
-            {
-              // Swap label based on state
-              label: isRaging ? 'Active' : 'Rage',
-              
-              // Swap value to a bold RAGING! or the uses remaining
-              value: isRaging
-                ? 'RAGING!'
-                : (rageMax === 999 ? '∞ uses' : `${Math.max(0, rageMax - ragesUsed)}/${rageMax}`),
-                
-              color: isRaging ? colors.accent : colors.accentSoft,
-              
-              onPress: () => {
-                if (rageMax === 0) return;
 
-                // If already raging, turn it off (doesn't refund the use)
-                if (isRaging) {
-                  setIsRaging(false);
-                  persist({ isRaging: false });
-                  return;
-                }
+    // Barbarian-only: Rage
+    ...(isBarbarian
+      ? [
+          {
+            // 1. Set label to null when raging so the value centers vertically
+            label: isRaging ? null : resourceName,
+            
+            value: isRaging
+              ? 'ACTIVE' // Or 'RAGING!' - whatever you prefer!
+              : (resourceMax === 999 ? '∞ uses' : `${Math.max(0, resourceMax - ragesUsed)}/${resourceMax}`),
+            
+            // 2. Base color (we'll make it red in the style override)
+            color: isRaging ? '#ff3333' : colors.accentSoft, 
+            
+            // 3. Pass custom styling for the active state
+            valueStyle: isRaging ? { fontSize: 22, fontWeight: '900', letterSpacing: 1 } : {},
+            
+            onPress: () => {
+              if (resourceMax === 0) return;
+              if (isRaging) {
+                setIsRaging(false);
+                persist({ isRaging: false });
+                return;
+              }
+              if (ragesUsed >= resourceMax && resourceMax !== 999) return;
 
-                // Start a new rage if we have uses left (ignore cap at 20 with 999)
-                if (ragesUsed >= rageMax && rageMax !== 999) return;
-
-                const newUsed = rageMax === 999 ? 0 : ragesUsed + 1;
-                setRagesUsed(newUsed);
-                setIsRaging(true);
-                persist({ ragesUsed: newUsed, isRaging: true });
-              },
+              const newUsed = resourceMax === 999 ? 0 : ragesUsed + 1;
+              setRagesUsed(newUsed);
+              setIsRaging(true);
+              persist({ ragesUsed: newUsed, isRaging: true });
             },
-          ]
-        : []),
-
-  ].map((stat) => (
+          },
+        ]
+      : []),
+].map((stat, index) => (
     <TouchableOpacity
-      key={stat.label}
+      key={stat.label || `stat-${index}`} // Fallback key in case label is null
       style={styles.gridCell}
       onPress={stat.onPress}
       onLongPress={stat.onLongPress}
       delayLongPress={400}
       activeOpacity={stat.onPress || stat.onLongPress ? 0.7 : 1}
     >
-      <Text style={[styles.gridValue, { color: stat.color }]}>{stat.value}</Text>
-      <Text style={styles.gridLabel}>{stat.label}</Text>
+      {/* 1. Inject the custom valueStyle here */}
+      <Text style={[styles.gridValue, { color: stat.color }, stat.valueStyle]}>
+        {stat.value}
+      </Text>
+      
+      {/* 2. Only render the label if it exists */}
+      {stat.label ? <Text style={styles.gridLabel}>{stat.label}</Text> : null}
+      
     </TouchableOpacity>
   ))}
 </View>
@@ -644,41 +655,7 @@ const doLevelUp = () => {
           );
         })()}
 
-        {/* ACTIVE FEATS */}
-{(character.feats?.length ?? 0) > 0 && (
-  <View style={{ marginTop: spacing.lg }}>
-    <Text style={sharedStyles.sectionHeader}>Feats
-    Feats: {character.feats.map(f => f.name).join(', ')}</Text>
-    {character.feats.map((feat, i) => {
-      const full = FEATS_BY_NAME[feat.name];
-      return (
-        <TouchableOpacity
-          key={`${feat.name}-${i}`}
-          style={styles.featChip}
-          delayLongPress={400}
-          activeOpacity={0.7}
-          onLongPress={() => {
-            setFeatDetail(full ?? feat);
-            setFeatDetailVisible(true);
-          }}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={styles.featChipName}>{feat.name}</Text>
-            {full && (
-              <Text style={styles.featChipMeta} numberOfLines={1}>
-                {formatFeatSummary(full)}
-              </Text>
-            )}
-          </View>
-          <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
-        </TouchableOpacity>
-      );
-    })}
-  </View>
-)}
-
-
-        {equippedAttacks.map((atk, i) => (
+         {equippedAttacks.map((atk, i) => (
           <TouchableOpacity
             key={i}
             style={[styles.attackRow, styles.attackRowWeapon]}
@@ -727,6 +704,41 @@ const doLevelUp = () => {
         
         )}
 
+
+       {/* ACTIVE FEATS */}
+{(character.feats?.length ?? 0) > 0 && (
+  <View style={{ marginTop: spacing.lg }}>
+    {character.feats.map((feat, i) => {
+      const full = FEATS_BY_NAME[feat.name];
+      return (
+              
+        <TouchableOpacity
+          key={`${feat.name}-${i}`}
+          style={styles.featChip}
+          delayLongPress={400}
+          activeOpacity={0.7}
+          onLongPress={() => {
+            setFeatDetail(full ?? feat);
+            setFeatDetailVisible(true);
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.featChipName}>{feat.name}</Text>
+            {full && (
+              <Text style={styles.featChipMeta} numberOfLines={1}>
+                {formatFeatSummary(full)}
+              </Text>
+            )}
+          </View>
+          <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+      );
+    })}
+  </View>
+)}
+
+
+       
         
 
         {/* EQUIPPED ITEMS */}
@@ -1065,21 +1077,21 @@ const doLevelUp = () => {
                         const isChosen = asiStats.includes(stat);
                         return (
                           <TouchableOpacity
-                            key={stat}
-                            style={[styles.asiStatBtn, isChosen && styles.asiStatBtnActive]}
-                            onPress={() => {
-                              if (isChosen) {
-                                setAsiStats(prev => prev.filter(s => s !== stat));
-                              } else if (asiStats.length < 2) {
-                                setAsiStats(prev => [...prev, stat]);
-                              }
-                            }}
-                          >
-                            <Text style={[styles.asiStatLabel, isChosen && styles.asiStatLabelActive]}>
-                              {stat.toUpperCase()}
-                            </Text>const full = featByName[feat.name];
-                            <Text style={[styles.asiStatScore, isChosen && styles.asiStatLabelActive]}>
-                              {character.abilities?.[stat] ?? 10}
+  key={stat}
+  style={[styles.asiStatBtn, isChosen && styles.asiStatBtnActive]}
+  onPress={() => {
+    if (isChosen) {
+      setAsiStats(prev => prev.filter(s => s !== stat));
+    } else if (asiStats.length < 2) {
+      setAsiStats(prev => [...prev, stat]);
+    }
+  }}
+>
+  <Text style={[styles.asiStatLabel, isChosen && styles.asiStatLabelActive]}>
+    {stat.toUpperCase()}
+  </Text>
+  <Text style={[styles.asiStatScore, isChosen && styles.asiStatLabelActive]}>
+    {character.abilities?.[stat] ?? 10}
                               {isChosen && (
                                 <Text style={{ color: colors.success }}>
                                   {asiStats.length === 1 ? '+2' : '+1'}

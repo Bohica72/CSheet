@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Alert, StyleSheet, SafeAreaView, Keyboard, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Switch, TextInput, Alert, StyleSheet, SafeAreaView, Keyboard, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, typography, radius, sharedStyles } from '../styles/theme';
+import { colors, spacing, typography, radius, sharedStyles,shadows } from '../styles/theme';
 import { Character } from '../models/Character';
 
 import OverviewScreen  from '../screens/OverviewScreen';
@@ -14,7 +14,7 @@ import { saveCharacter } from '../utils/CharacterStore';
 import { getClassData } from '../utils/ClassStore';
 import MagicScreen from '../screens/MagicScreen';
 
-export default function CharacterTabs({ route }) {
+export default function CharacterTabs({ route, navigation }) {
   const raw = route.params.character;
   const character = raw instanceof Character ? raw : new Character(raw);
 
@@ -61,37 +61,40 @@ const handleSaveCustomWeapon = async () => {
   const newEntry = {
     itemName: weaponName.trim(),
     quantity: 1,
-    equipped: false,
-    attuned: false,
+    equipped: true, // Auto-equip so it immediately shows on OverviewScreen!
+    attuned: weaponAttunement,
     charges: null,
-    // Fields that mirror the weapon format so the app treats it correctly
     isCustomWeapon: true,
-    Name: weaponName.trim(),       // needed by getItemByName lookups
-    ObjectType: 'Weapon',          // THIS is what fixes the equipped list
+    Name: weaponName.trim(),       
+    ObjectType: 'Weapon',          
     Type: weaponType,
     damageDie: weaponDice,
     modifier: weaponModifier,
     BonusWeapon: parseInt(weaponBonusWeapon, 10),
     Attunement: weaponAttunement ? 'Yes' : 'No',
     description: weaponDescription.trim(),
-    Description: weaponDescription.trim(), // both cases for safety
+    Description: weaponDescription.trim(), 
   };
 
-  
-
- // 3. Update and Save
   try {
-    const updatedInventory = [...(character.inventory ?? []), newEntry];
-    character.inventory = updatedInventory;
+    // 1. Create a fresh clone of the character to force React to re-render
+    const updatedCharacter = Object.assign(new Character(character), character);
     
-    await saveCharacter(character);
+    // 2. Add the weapon to the new inventory array
+    updatedCharacter.inventory = [...(updatedCharacter.inventory ?? []), newEntry];
+    
+    // 3. Save to device storage
+    await saveCharacter(updatedCharacter);
+    
+    // 4. Force React Navigation to update, instantly revealing the weapon on all tabs!
+    navigation.setParams({ character: updatedCharacter });
+    
     resetAndClose();
   } catch (error) {
     Alert.alert("Error", "Failed to save weapon.");
     console.error(error);
   }
 };
-
 
 
 
@@ -212,14 +215,16 @@ const handleSaveCustomWeapon = async () => {
 </View>
 
 {/* Attunement */}
-<TouchableOpacity
-  style={[styles.typeChip, weaponAttunement && styles.typeChipActive, { marginBottom: spacing.md }]}
-  onPress={() => setWeaponAttunement(prev => !prev)}
->
-  <Text style={[styles.typeChipText, weaponAttunement && styles.typeChipTextActive]}>
-    {weaponAttunement ? '✓ Requires Attunement' : 'Requires Attunement'}
-  </Text>
-</TouchableOpacity>
+<View style={styles.attunementRow}>
+  <Text style={styles.weaponLabel}>Requires Attunement</Text>
+  <Switch
+    value={weaponAttunement}
+    onValueChange={setWeaponAttunement}
+    trackColor={{ false: colors.surfaceDeep, true: colors.accentDim }}
+    thumbColor={weaponAttunement ? colors.accent : colors.textMuted}
+  />
+</View>
+
 
 
 
@@ -457,7 +462,7 @@ typeChip: {
 },
 typeChipActive: {
   borderColor: colors.accent,
-  backgroundColor: colors.surface,
+  backgroundColor: colors.accent, // Fills the button with your accent color
 },
 typeChipText: {
   color: colors.textMuted,
@@ -465,7 +470,7 @@ typeChipText: {
   fontWeight: '600',
 },
 typeChipTextActive: {
-  color: colors.accent,
+  color: colors.background, // Turns the text to your dark/light background color for high contrast
 },
 
 chipGrid: {
@@ -474,6 +479,154 @@ chipGrid: {
   gap: spacing.xs,
   marginBottom: spacing.md,
 },
+// Add or replace these in your StyleSheet.create({})
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center', // This ensures horizontal centering
+    paddingVertical: spacing.xl,
+    width: '100%', // Force full width
+  },
+  fancyModalBox: {
+    width: '90%', // Controls modal width reliably
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.surfaceDeep,
+    ...shadows.card,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surfaceDeep,
+    paddingBottom: spacing.sm,
+  },
+  modalTitleLarge: {
+    ...typography.heading,
+    fontSize: 20,
+    color: colors.textPrimary,
+  },
+  inputSection: {
+    marginBottom: spacing.md,
+  },
+  inputLabel: {
+    ...typography.label,
+    color: colors.accent,
+    marginBottom: spacing.xs,
+    fontSize: 10,
+  },
+  themedInput: {
+    backgroundColor: colors.surfaceDeep,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    color: colors.textPrimary,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: colors.surfaceAlt,
+  },
+  miniChipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: spacing.md,
+  },
+  miniChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceDeep,
+    minWidth: 45,
+    alignItems: 'center',
+  },
+  miniChipActive: {
+    backgroundColor: colors.accentSoft,
+  },
+  miniChipText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  miniChipTextActive: {
+    color: colors.background,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: spacing.md,
+    backgroundColor: colors.surfaceDeep,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+  },
+  toggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    padding: spacing.xs,
+    borderRadius: radius.sm,
+  },
+  toggleBtnActive: {
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.sm,
+  },
+  toggleBtnText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  toggleBtnTextActive: {
+    color: colors.background,
+  },
+  bonusPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bonusLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: 'bold',
+  },
+  bonusNum: {
+    fontSize: 14,
+    color: colors.textDisabled,
+    fontWeight: 'bold',
+  },
+  bonusNumActive: {
+    color: colors.gold,
+    fontSize: 18,
+  },
+  saveButton: {
+    backgroundColor: colors.accent,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  saveButtonText: {
+    color: colors.background,
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  cancelLink: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+  },
+  cancelLinkText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    textDecorationLine: 'underline',
+  },
 
+attunementRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginBottom: spacing.md,
+},
 
 });
